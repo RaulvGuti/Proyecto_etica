@@ -1,0 +1,59 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap');
+
+:root {
+  --bg: #F6F3EC;
+  --surface: #FFFFFF;
+  --ink: #20261F;
+  --muted: #5B6459;
+  --primary: #2F6B5E;
+  --primary-dark: #204A41;
+  --danger: #B84438;
+  --line: #DDD6C6;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Work Sans', sans-serif;
+  line-height: 1.5;
+}
+
+h1, h2, h3 {
+  font-family: 'Source Serif 4', serif;
+  margin: 0 0 0.4em;
+}
+
+p { color: var(--muted); max-width: 62ch; margin: 0 0 1em; }
+a { color: var(--primary-dark); }
+
+.wrap { max-width: 1000px; margin: 0 auto; padding: 0 20px; }
+
+/* Barra de emergencia */
+.emergency-bar { background: var(--danger); color: #fff; font-size: 0.9rem; padding: 8px 0; }
+.emergency-bar .wrap { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; }
+.emergency-bar a { color: #fff; text-decoration: underline; }
+
+/* Navegación */
+.navbar { position: sticky; top: 0; z-index: 10; background: var(--bg); border-bottom: 1px solid var(--line); }
+.navbar .wrap { display: flex; gap: 6px; padding: 14px 20px; overflow-x: auto; }
+.nav-link {
+  padding: 9px 16px; border-radius: 999px; font-size: 0.95rem;
+  color: var(--muted); text-decoration: none; white-space: nowrap;
+}
+.nav-link:hover { background: var(--surface); border: 1px solid var(--line); }
+.nav-link.active { background: var(--primary); color: #fff; font-weight: 500; }
+
+/* Home / hero */
+.hero { display: grid; grid-template-columns: 1.3fr 1fr; gap: 40px; padding: 48px 20px; max-width: 1000px; margin: 0 auto; align-items: start; }
+@media (max-width: 760px) { .hero { grid-template-columns: 1fr; } }
+.hero h1 { font-size: 2.3rem; line-height: 1.15; color: var(--primary-dark); }
+
+.sos-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; }
+.sos-card h3 { color: var(--danger); font-size: 1.1rem; }
+.sos-card ul { list-style: none; margin: 0; padding: 0; }
+.sos-card li { padding: 9px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; font-size: 0.95rem; }
+.sos-card li:first-child { border-top: none; }
