@@ -1,0 +1,69 @@
+name: Deuda tecnica
+description: Refactorizacion, optimizacion, limpieza o mantenimiento
+title: "refactor(<alcance>): "
+labels: ["type:refactor"]
+body:
+  - type: textarea
+    id: situacion
+    attributes:
+      label: Situacion actual
+      description: Que hay hoy en el codigo o arquitectura y por que genera friccion o problemas tecnicos.
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Propuesta de mejora
+      description: Que cambios se proponen realizar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: hecho
+    attributes:
+      label: Definicion de terminado
+      value: |
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+
+  - type: input
+    id: ubicacion
+    attributes:
+      label: Ubicacion en el codigo
+      description: Ruta, archivo o rango afectado.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Modulo
+      options:
+        - supabase
+        - perfiles
+        - organizaciones
+        - publicaciones
+        - reportes
+        - ui
+        - infra
+    validations:
+      required: true
+
+  - type: dropdown
+    id: prioridad
+    attributes:
+      label: Prioridad
+      options: [critica, alta, media, baja]
+    validations:
+      required: true
+
+  - type: input
+    id: depende
+    attributes:
+      label: Depende de
+      description: "Issues que deben cerrarse antes (ejemplo: `#12, #14`)"
+    validations:
+      required: false

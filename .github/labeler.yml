@@ -1,0 +1,61 @@
+# Etiquetado automatico de PR segun las rutas tocadas (actions/labeler v5).
+#
+# Solo actua sobre PULL REQUESTS.
+# Las etiquetas deben existir en el repositorio (definidas en .github/labels.yml).
+
+"module:supabase":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "supabase/**"
+          - "src/lib/supabase/**"
+
+"module:perfiles":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/app/**/perfil*/**"
+          - "supabase/migrations/*perfiles*"
+
+"module:organizaciones":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/app/**/organizaci*/**"
+          - "supabase/migrations/*organizaciones*"
+
+"module:publicaciones":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/app/**/publicaci*/**"
+          - "supabase/migrations/*publicaciones*"
+
+"module:reportes":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/app/**/reporte*/**"
+          - "supabase/migrations/*reportes*"
+
+"module:ui":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "src/components/**"
+          - "src/styles/**"
+          - "src/app/**"
+
+"module:infra":
+  - changed-files:
+      - any-glob-to-any-file:
+          - ".github/**"
+          - "package.json"
+          - "package-lock.json"
+          - "next.config.*"
+          - "tsconfig.json"
+          - "eslint.config.*"
+          - "postcss.config.*"
+          - ".editorconfig"
+          - ".gitattributes"
+          - ".pre-commit-config.yaml"
+
+"type:docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "docs/**"
+          - "**/*.md"

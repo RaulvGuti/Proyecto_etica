@@ -1,0 +1,28 @@
+# Agrupa las notas de release por categoria de etiqueta.
+# Se usa al pulsar "Generate release notes" o con `gh release create --generate-notes`.
+
+changelog:
+  exclude:
+    labels:
+      - "type:chore"
+      - "status:bloqueado"
+      - "status:no-se-hara"
+  categories:
+    - title: "🚨 Cambios que rompen compatibilidad"
+      labels: ["breaking-change"]
+    - title: "✨ Nuevas funcionalidades"
+      labels: ["type:feature"]
+    - title: "🐛 Correcciones"
+      labels: ["type:bug"]
+    - title: "🔒 Seguridad"
+      labels: ["type:security"]
+    - title: "⚡ Rendimiento"
+      labels: ["type:perf"]
+    - title: "♻️ Refactorización"
+      labels: ["type:refactor"]
+    - title: "📝 Documentación"
+      labels: ["type:docs"]
+    - title: "📦 Dependencias"
+      labels: ["dependencies"]
+    - title: "🛠️ Otros cambios"
+      labels: ["*"]

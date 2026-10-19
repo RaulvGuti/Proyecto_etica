@@ -1,0 +1,21 @@
+# Normaliza finales de linea a LF en el repositorio.
+* text=auto eol=lf
+
+# Binarios: evita que git intente tratarlos como texto.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+
+# SVG es XML: interesa ver el diff.
+*.svg text
+
+# Archivos generados: fuera de las estadisticas de lenguaje y colapsados en el diff.
+*.lock linguist-generated=true
+pnpm-lock.yaml linguist-generated=true
+package-lock.json linguist-generated=true
+Cargo.lock linguist-generated=true

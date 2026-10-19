@@ -1,0 +1,48 @@
+name: CI
+
+# Verificacion para proyecto Next.js con TypeScript, ESLint y npm.
+# Rapido y enfocado: ejecuta verificaciones de sintaxis, tipos y compilacion.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Lint, tipos y build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Orden deliberado: lo mas barato primero.
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Verificacion de tipos (TypeScript)
+        run: npm run typecheck
+
+      - name: Build de produccion (Next.js)
+        run: npm run build
+
+      # Auditoria de dependencias informativa para no romper por falsos positivos
+      - name: Auditoria de dependencias
+        run: npm audit --audit-level=high
+        continue-on-error: true

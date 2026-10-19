@@ -1,0 +1,65 @@
+name: Requerimiento funcional
+description: Proponer una nueva funcionalidad o mejora
+title: "feat(<alcance>): "
+labels: ["type:feature"]
+body:
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Descripcion de la funcionalidad
+      description: Que debe poder hacer la persona usuaria y por que razon se necesita.
+    validations:
+      required: true
+
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Criterios de aceptacion
+      value: |
+        - [ ] 
+        - [ ] 
+    validations:
+      required: true
+
+  - type: textarea
+    id: fuera
+    attributes:
+      label: Fuera de alcance
+      description: Que NO entra en esta tarea para mantenerla acotada.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Modulo
+      options:
+        - supabase
+        - perfiles
+        - organizaciones
+        - publicaciones
+        - reportes
+        - ui
+        - infra
+    validations:
+      required: true
+
+  - type: dropdown
+    id: prioridad
+    attributes:
+      label: Prioridad
+      options:
+        - critica
+        - alta
+        - media
+        - baja
+    validations:
+      required: true
+
+  - type: textarea
+    id: notas
+    attributes:
+      label: Notas tecnicas
+      description: Cambios de esquema en Supabase, nuevas dependencias, contratos o APIs afectadas.
+    validations:
+      required: false

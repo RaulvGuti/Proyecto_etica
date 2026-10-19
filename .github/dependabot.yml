@@ -1,0 +1,31 @@
+# Actualizaciones automaticas de dependencias.
+# Disponible y gratis en repositorios publicos y privados.
+#
+# `groups` agrupa actualizaciones menores y parches para no inundar el repositorio con PRs.
+
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["type:chore", "dependencies", "module:infra"]
+    groups:
+      acciones:
+        patterns: ["*"]
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels: ["type:chore", "dependencies"]
+    open-pull-requests-limit: 5
+    groups:
+      npm-desarrollo:
+        dependency-type: "development"
+        applies-to: version-updates
+        update-types: ["minor", "patch"]
+      npm-produccion:
+        dependency-type: "production"
+        applies-to: version-updates
+        update-types: ["minor", "patch"]

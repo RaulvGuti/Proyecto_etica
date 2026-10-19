@@ -1,0 +1,31 @@
+name: Etiquetado
+
+# Aplica etiquetas a los PR segun las rutas tocadas, usando .github/labeler.yml.
+#
+# Se usa `pull_request_target` y NO `pull_request` porque en PR desde forks el
+# token de `pull_request` es de solo lectura y no podria etiquetar. Es seguro
+# aqui porque este workflow NO hace checkout del codigo del PR: solo lee la lista
+# de archivos por API.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: etiquetado-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  etiquetar:
+    name: Aplicar etiquetas
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9 # v5.0.0
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          sync-labels: false

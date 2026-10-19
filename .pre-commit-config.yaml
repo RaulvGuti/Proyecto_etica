@@ -1,0 +1,44 @@
+# Comprobaciones antes de cada commit.
+#
+# La pieza clave es gitleaks: en repositorios privados de cuenta personal el secret
+# scanning nativo de GitHub NO esta disponible en ningun plan individual, asi que esto
+# es el unico corte real antes de que una credencial entre en la historia de git.
+#
+# Instalar:
+#   pip install pre-commit   (o brew install pre-commit)
+#   pre-commit install
+#
+# Pasar sobre todo el repositorio la primera vez:
+#   pre-commit run --all-files
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+        exclude: ^(\.github/.*|plantillas-github/.*)$
+      - id: check-json
+      - id: check-merge-conflict
+      - id: detect-private-key
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+      - id: no-commit-to-branch
+        args: ["--branch", "main"]
+
+  # Detector de secretos: previene fugar tokens, claves Supabase de service role o contraseñas
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # Linter local para JavaScript/TypeScript en frontend y Supabase
+  - repo: local
+    hooks:
+      - id: eslint
+        name: eslint
+        entry: npm run lint
+        language: system
+        files: \.(ts|tsx|js|mjs)$
+        pass_filenames: false

@@ -1,0 +1,8 @@
+# Asigna revisores automaticamente segun la ruta tocada.
+
+* @RaulvGuti
+
+# Rutas especificas
+/src/lib/supabase/  @RaulvGuti
+/supabase/          @RaulvGuti
+/.github/           @RaulvGuti

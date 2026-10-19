@@ -1,0 +1,108 @@
+# Catalogo de etiquetas. Fuente de verdad del repositorio.
+#
+# Aplicar con GitHub CLI:
+#   python3 -c "
+#   import yaml, subprocess
+#   for l in yaml.safe_load(open('.github/labels.yml')):
+#       subprocess.run(['gh','label','create',l['name'],'--color',l['color'],
+#                       '--description',l.get('description',''),'--force'])
+#   "
+#
+# Como se aplican:
+#   type:                  automatica, por la clave `labels:` de la plantilla de issue
+#   module:                automatica en PRs, via labeler.yml
+#   priority:, status:     a mano; no se pueden deducir de un diff
+
+# --- Tipo: que clase de trabajo es ---
+- name: "type:feature"
+  color: "0e8a16"
+  description: "Nueva funcionalidad"
+- name: "type:bug"
+  color: "d73a4a"
+  description: "Algo no funciona como deberia"
+- name: "type:security"
+  color: "b60205"
+  description: "Vulnerabilidad, autorizacion o exposicion de datos"
+- name: "type:refactor"
+  color: "5319e7"
+  description: "Reorganizacion sin cambio de comportamiento"
+- name: "type:perf"
+  color: "fbca04"
+  description: "Rendimiento"
+- name: "type:test"
+  color: "1d76db"
+  description: "Cobertura de pruebas"
+- name: "type:docs"
+  color: "0075ca"
+  description: "Documentacion"
+- name: "type:chore"
+  color: "cfd3d7"
+  description: "Dependencias, configuracion, tooling"
+
+# --- Modulo: modulos del dominio de la aplicacion ---
+- name: "module:supabase"
+  color: "3ecf8e"
+  description: "Base de datos PostgreSQL, RLS, migraciones y extensiones"
+- name: "module:perfiles"
+  color: "c2e0c6"
+  description: "Modulo de perfiles y usuarios"
+- name: "module:organizaciones"
+  color: "c2e0c6"
+  description: "Directorio de organizaciones y apoyo migrante"
+- name: "module:publicaciones"
+  color: "c2e0c6"
+  description: "Publicaciones, contenidos y comunidad"
+- name: "module:reportes"
+  color: "c2e0c6"
+  description: "Reportes, alertas y lineas de emergencia"
+- name: "module:ui"
+  color: "a2eeef"
+  description: "Componentes de interfaz, accesibilidad y diseno con Tailwind CSS"
+- name: "module:infra"
+  color: "c2e0c6"
+  description: "Configuracion de Next.js, TypeScript, ESLint, CI/CD y tooling"
+
+# --- Prioridad ---
+- name: "priority:critica"
+  color: "b60205"
+  description: "Bloquea o expone datos sensibles. Se atiende ya"
+- name: "priority:alta"
+  color: "d93f0b"
+  description: "Alta prioridad antes del proximo hito"
+- name: "priority:media"
+  color: "fbca04"
+  description: "Planificable"
+- name: "priority:baja"
+  color: "0e8a16"
+  description: "Cuando haya espacio"
+
+# --- Estado del trabajo ---
+- name: "status:bloqueado"
+  color: "000000"
+  description: "Depende de otra issue o de una decision externa"
+- name: "status:necesita-decision"
+  color: "d876e3"
+  description: "Requiere una decision de diseno o producto antes de avanzar"
+- name: "status:en-progreso"
+  color: "0e8a16"
+  description: "Alguien esta trabajando en ello"
+- name: "status:duplicada"
+  color: "cfd3d7"
+  description: "Ya existe otra issue que cubre esto"
+- name: "status:no-se-hara"
+  color: "ffffff"
+  description: "Se decidio no abordarlo"
+
+# --- Agrupacion y automatismos ---
+- name: "epic"
+  color: "3e4b9e"
+  description: "Agrupa varias issues relacionadas"
+- name: "dependencies"
+  color: "0366d6"
+  description: "Actualizacion de dependencias (la aplica Dependabot)"
+- name: "breaking-change"
+  color: "b60205"
+  description: "Rompe contratos previos o compatibilidad"
+- name: "migracion-editada-a-proposito"
+  color: "e99695"
+  description: "Permite conscientemente modificar una migracion SQL existente en el PR"

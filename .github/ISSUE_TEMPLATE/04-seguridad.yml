@@ -1,0 +1,61 @@
+name: Seguridad
+description: Reporte de vulnerabilidad, fallo de RLS, autorizacion o datos sensibles
+title: "security(<alcance>): "
+labels: ["type:security", "priority:alta"]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        IMPORTANTE: No incluyas credenciales reales, tokens activos ni payloads maliciosos completos.
+        Si la informacion es sensible, reportalo privadamente segun la politica de SECURITY.md.
+
+  - type: textarea
+    id: riesgo
+    attributes:
+      label: Riesgo
+      description: Que podria hacer o ver un usuario no autorizado debido a esta vulnerabilidad.
+    validations:
+      required: true
+
+  - type: input
+    id: ubicacion
+    attributes:
+      label: Ubicacion en el codigo
+      description: "Ruta del archivo o migracion (ej: `supabase/migrations/00008_rls_policies.sql` o `src/lib/supabase/server.ts`)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: clase
+    attributes:
+      label: Categoria del problema
+      options:
+        - Fuga de politica RLS en Supabase
+        - Falta verificacion de sesion
+        - Falta verificacion de permisos
+        - Aislamiento entre perfiles/entidades (IDOR)
+        - Escalada de privilegios
+        - Exposicion de clave service_role o credenciales
+        - Dependencia vulnerable
+        - Superficie de permisos excesiva
+        - Otro
+    validations:
+      required: true
+
+  - type: textarea
+    id: correccion
+    attributes:
+      label: Correccion propuesta
+    validations:
+      required: true
+
+  - type: textarea
+    id: verificacion
+    attributes:
+      label: Como se verifica el arreglo
+      value: |
+        - [ ] Consulta verificada sin permisos de service_role
+        - [ ] Politica RLS probada con usuario autenticado y anonimo
+        - [ ] El alcance sale del servidor, no de un parametro del cliente
+    validations:
+      required: true

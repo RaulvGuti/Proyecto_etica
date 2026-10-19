@@ -1,0 +1,98 @@
+name: Validar PR
+
+# Dos comprobaciones baratas que atrapan errores caros:
+#
+# 1. El titulo sigue Conventional Commits con descripcion en espanol. Con merge por
+#    squash, el titulo del PR acaba siendo el mensaje de commit en la rama principal.
+#
+# 2. El diff no introduce archivos prohibidos (claves, .env, backups, etc.).
+#    Se exceptuan explicitamente las migraciones legitimas de Supabase y el seed.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validar-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validar:
+    name: Titulo y archivos
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Validar el titulo del PR
+        env:
+          TITULO: ${{ github.event.pull_request.title }}
+        run: |
+          patron='^(feat|fix|perf|refactor|test|docs|chore|build|ci|style|security|caracteristica|correccion|arreglo)(\([a-z0-9,._/-]+\))?!?: .+'
+          if [[ ! "$TITULO" =~ $patron ]]; then
+            echo "::error::El titulo no sigue Conventional Commits: '$TITULO'"
+            echo "Formato esperado:  tipo(alcance): descripcion en espanol"
+            echo "Ejemplo:           feat(auth): integrar autenticacion con supabase"
+            echo "Ejemplo:           fix(ui): corregir enlaces en barra de navegacion"
+            exit 1
+          fi
+          echo "Titulo correcto: $TITULO"
+
+      - name: Comprobar que no se introducen archivos prohibidos
+        run: |
+          git fetch --no-tags origin "$GITHUB_BASE_REF"
+          base="$(git merge-base "origin/$GITHUB_BASE_REF" HEAD)"
+
+          # Solo archivos anadidos o modificados; los borrados no importan.
+          archivos="$(git diff --name-only --diff-filter=AM "$base" HEAD)"
+
+          # Patrones de archivos prohibidos (claves privadas, credenciales, bases de datos binarias)
+          prohibidos='(^|/)\.env($|\.)|\.(db|sqlite3?|dump|pem|key|p12|pfx|crt|keystore|jks)$|(secret|credential|password|backup)'
+
+          # Excepciones legitimas del proyecto:
+          # - Variables de ejemplo (.env.example)
+          # - Migraciones SQL de Supabase y seed.sql (esenciales para el proyecto)
+          # - Lineas base de seguridad
+          excepciones='\.env\.example$|\.env\.template$|\.secrets\.baseline$|gitleaks\.toml$|^supabase/migrations/.*\.sql$|^supabase/seed\.sql$'
+
+          encontrados=""
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            if echo "$f" | grep -qiE "$prohibidos" && ! echo "$f" | grep -qiE "$excepciones"; then
+              encontrados="$encontrados  $f"$'\n'
+            fi
+          done <<< "$archivos"
+
+          if [ -n "$encontrados" ]; then
+            echo "::error::El PR introduce archivos que no deben versionarse:"
+            echo "$encontrados"
+            {
+              echo "## Archivos prohibidos detectados"
+              echo
+              echo '```'
+              echo "$encontrados"
+              echo '```'
+              echo
+              echo "Estos archivos suelen contener credenciales o datos reales. Sacalos del"
+              echo "commit y agregalos al \`.gitignore\`. Si alguno es un falso positivo,"
+              echo "agregalo a las excepciones de este workflow explicando por que."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          echo "Sin archivos prohibidos."
+
+      - name: Avisar si el PR es muy grande
+        env:
+          ADD: ${{ github.event.pull_request.additions }}
+          DEL: ${{ github.event.pull_request.deletions }}
+        run: |
+          total=$((ADD + DEL))
+          if [ "$total" -gt 1500 ]; then
+            echo "::warning::El PR cambia $total lineas. Valora dividirlo para facilitar la revision."
+          fi
+          echo "Lineas cambiadas: $total" >> "$GITHUB_STEP_SUMMARY"

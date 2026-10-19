@@ -1,0 +1,83 @@
+name: Bug
+description: Reportar un error o comportamiento inesperado
+title: "fix(<alcance>): "
+labels: ["type:bug"]
+body:
+  - type: textarea
+    id: descripcion
+    attributes:
+      label: Descripcion del bug
+      description: Que ocurrio, en una o dos frases claras.
+    validations:
+      required: true
+
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Comportamiento esperado
+      description: Que deberia haber ocurrido en su lugar.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproducir
+    attributes:
+      label: Pasos para reproducir
+      value: |
+        1. 
+        2. 
+        3. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: entorno
+    attributes:
+      label: Entorno y diagnostico
+      description: "Salida de comandos locales o informacion de navegador (ej: `node -v && npm -v && npm run lint`)"
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: ubicacion
+    attributes:
+      label: Ubicacion en el codigo
+      description: "Ruta y linea, si se conoce (ej: `src/components/NavBar.tsx:15` o `supabase/migrations/00003_perfiles.sql`)"
+    validations:
+      required: false
+
+  - type: dropdown
+    id: modulo
+    attributes:
+      label: Modulo afectado
+      options:
+        - supabase
+        - perfiles
+        - organizaciones
+        - publicaciones
+        - reportes
+        - ui
+        - infra
+    validations:
+      required: true
+
+  - type: dropdown
+    id: prioridad
+    attributes:
+      label: Prioridad
+      options:
+        - critica
+        - alta
+        - media
+        - baja
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto adicional
+      description: Logs, capturas o mensajes de error. No incluir credenciales ni datos reales privados.
+    validations:
+      required: false

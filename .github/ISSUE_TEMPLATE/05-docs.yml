@@ -1,0 +1,34 @@
+name: Documentacion
+description: Corregir, actualizar o ampliar la documentacion del proyecto
+title: "docs(<alcance>): "
+labels: ["type:docs"]
+body:
+  - type: input
+    id: archivo
+    attributes:
+      label: Archivo o seccion afectada
+      description: "Ruta en `docs/` o README (ej: `docs/GUIA_WORKFLOWS_Y_CONVENCIONES.md`)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Que esta desactualizado, incorrecto o falta
+    validations:
+      required: true
+
+  - type: textarea
+    id: propuesta
+    attributes:
+      label: Contenido o cambio propuesto
+    validations:
+      required: false
+
+  - type: dropdown
+    id: prioridad
+    attributes:
+      label: Prioridad
+      options: [alta, media, baja]
+    validations:
+      required: true
