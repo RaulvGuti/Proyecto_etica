@@ -10,6 +10,7 @@
 ## Indice de Entradas
 
 - [Entrada 001 - 2026-10-19: Implementacion de Workflows de GitHub, Gobernanza en Espanol y Documentacion](#entrada-001---2026-10-19-implementacion-de-workflows-de-github-gobernanza-en-espanol-y-documentacion)
+- [Entrada 002 - 2026-10-29: Implementacion de las Paginas de Salud, Comunidad y Directorio](#entrada-002---2026-10-29-implementacion-de-las-paginas-de-salud-comunidad-y-directorio)
 
 ---
 
@@ -94,3 +95,46 @@ Se solicito utilizar el catalogo de plantillas ubicado en `plantillas-github/` p
 - `npm run lint`: Exito (0 advertencias, 0 errores).
 - `npm run typecheck`: Exito (TypeScript compila sin errores).
 - `npm run build`: Exito (Build de produccion Next.js 16 generado correctamente con Turbopack).
+
+---
+
+## Entrada 002 - 2026-10-29: Implementacion de las Paginas de Salud, Comunidad y Directorio
+
+### 1. Contexto y Solicitud del Usuario
+Se solicito la creacion completa de las tres paginas faltantes del portal **Puente**:
+1. **Salud y Autocuidado** (`/salud`)
+2. **Comunidad** (`/comunidad`)
+3. **Directorio** (`/directorio`)
+
+Con las premisas de basarse fielmente en el frontend existente, conectarse profundamente a las 10 migraciones de base de datos de Supabase existentes y entregar una estetica y funcionalidad perfectamente integradas con la arquitectura y pautas eticas del proyecto.
+
+### 2. Decisiones Arquitectonicas y Tecnicas
+- **Alineacion total con el esquema de base de datos**:
+  - `src/types/database.ts`: Modelado estricto de tipos para las tablas de las migraciones (`categorias`, `ciudades`, `tipos_organizacion`, `perfiles`, `organizaciones`, `publicaciones`, `reportes`).
+  - `src/lib/initialData.ts`: Catalogo estructurado de datos semilla y guias medicas humanitarias en ruta, alineado al 100% con `supabase/seed.sql` y las migraciones `00002_lookup_tables.sql` a `00006_reportes.sql`.
+  - Resiliencia y tolerancia a fallos offline: En caso de que el contenedor de Supabase no este corriendo localmente o en entornos de build en CI, la aplicacion usa fallbacks inteligentes que impiden que el renderizado o compilacion estatica falle, mientras que al estar conectado a Supabase ejecuta las consultas y mutaciones en vivo con RLS activo.
+- **Frontend y Sistema de Diseno**:
+  - Se extendio `src/styles/globals.css` respetando las variables de color de Puente (`--bg`, `--surface`, `--ink`, `--muted`, `--primary`, `--danger`, `--line`), implementando tarjetas interactivas, badges semanticos de categorizacion, modales accesibles, barras de filtros y buscadores en tiempo real.
+- **Paginas Implementadas**:
+  - `src/app/salud/page.tsx`: Modulo integral con lineas de urgencia medica 24h (Cruz Roja 125, Bomberos 122/123, PDH 1555), conmutador de guias interactivas de autocuidado en ruta (pies/ampollas, suero oral casero, golpe de calor, primeros auxilios emocionales, salud de mujeres) y directorio de centros de salud y Cruz Roja filtrables por ciudad/departamento.
+  - `src/app/comunidad/page.tsx`: Espacio seguro con feed cronologico de publicaciones segun `00005_publicaciones.sql` y `00009_indexes.sql`, filtros por categoria (`Consejo`, `Pregunta`, `Ánimo`, `Alerta`), buscador en tiempo real, formulario con conteo de caracteres (hasta 2000) y soporte para publicacion anonima, mas modal de reportes conectado a `00006_reportes.sql` (`reportes`).
+  - `src/app/directorio/page.tsx`: Directorio integral de recursos de acogida segun `00004_organizaciones.sql`, con filtros combinados por tipo (`Albergue`, `Salud`, `Legal`, `Atención a retornados`, `Orientación`, `Comedor`), ubicacion geografica (`ciudades`), filtro de organizaciones verificadas, enlaces de llamada telefonica directa y modal para sugerir nuevos puntos de apoyo.
+  - `src/app/page.tsx`: Se integro una seccion de acceso rapido visual a las tres areas desde el Hero principal manteniendo intacto el bloque SOS original.
+
+### 3. Archivos Tocados y Creados
+- [src/types/database.ts](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/types/database.ts) (Nuevo)
+- [src/lib/initialData.ts](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/lib/initialData.ts) (Nuevo)
+- [src/app/salud/page.tsx](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/app/salud/page.tsx) (Nuevo)
+- [src/app/comunidad/page.tsx](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/app/comunidad/page.tsx) (Nuevo)
+- [src/app/directorio/page.tsx](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/app/directorio/page.tsx) (Nuevo)
+- [src/lib/supabase/client.ts](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/lib/supabase/client.ts) (Modificado: valores de respaldo seguros para variables de entorno)
+- [src/lib/supabase/server.ts](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/lib/supabase/server.ts) (Modificado: valores de respaldo seguros para variables de entorno)
+- [src/styles/globals.css](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/styles/globals.css) (Modificado: extension del sistema de diseno)
+- [src/app/page.tsx](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/app/page.tsx) (Modificado: accesos directos a las tres secciones)
+- [docs/BITACORA_CAMBIOS.md](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/docs/BITACORA_CAMBIOS.md) (Modificado: registro acumulativo de esta intervencion)
+
+### 4. Verificacion Realizada
+- `npm run lint`: Exito (0 advertencias, 0 errores).
+- `npm run typecheck`: Exito (TypeScript compila sin errores).
+- `npm run build`: Exito (Build de produccion Next.js 16 generado con Turbopack; las 4 rutas `/`, `/salud`, `/comunidad`, `/directorio` pre-renderizadas exitosamente).
+
