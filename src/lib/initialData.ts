@@ -4,7 +4,10 @@ import {
   TipoOrganizacion,
   OrganizacionConDetalles,
   PublicacionConCategoria,
+  ReporteConPublicacion,
+  GuiaSalud,
 } from '@/types/database';
+
 
 export const CATEGORIAS_INICIALES: Categoria[] = [
   { id: 1, nombre: 'Consejo', descripcion: 'Consejo práctico de otro migrante' },
@@ -339,3 +342,115 @@ export const GUIAS_SALUD: GuiaAutocuidado[] = [
     alertaMedica: 'Señales de alarma en embarazo: sangrado vaginal, salida de líquido, dolor abdominal tipo cólico fuerte, dolor de cabeza intenso o disminución de movimientos del bebé.',
   },
 ];
+
+export const GUIAS_SALUD_DB_INICIALES: GuiaSalud[] = [
+  {
+    id: 1,
+    slug: 'cuidado-pies-ampollas',
+    categoria: 'pies',
+    titulo: 'Cuidado de pies y tratamiento de ampollas',
+    resumen: 'Tus pies son tu medio de transporte. Prevenir infecciones y ampollas es vital para no detener tu paso.',
+    instrucciones: [
+      'Evita reventar las ampollas; la piel superior actúa como apósito natural que protege contra bacterias.',
+      'Si una ampolla se revienta, lava suavemente con agua y jabón neutro. No apliques alcohol ni ceniza.',
+      'Aplica vaselina o crema densa entre los dedos y talones antes de comenzar a caminar para reducir fricción.',
+      'Mantén calcetines secos en bolsa impermeable y rótalos a mitad de jornada.',
+      'Eleva los pies sobre tu mochila 15 minutos al descansar para desinflamar.'
+    ],
+    alerta_medica: 'Si la zona está roja brillante, muy caliente, supura líquido espeso o te da fiebre, busca auxilio médico de inmediato.',
+    orden: 1,
+    creado_por: null,
+    creado_en: '2026-01-01T00:00:00Z',
+    actualizado_en: '2026-01-01T00:00:00Z',
+    eliminado_en: null,
+  },
+  {
+    id: 2,
+    slug: 'suero-oral-deshidratacion',
+    categoria: 'hidratacion',
+    titulo: 'Suero oral casero y agua segura',
+    resumen: 'Beber solo agua natural en caminatas intensas no repone los minerales perdidos por el sudor. Aprende a preparar suero de emergencia.',
+    instrucciones: [
+      'Fórmula casera: en 1 litro de agua limpia disuelve 6 cucharaditas de azúcar y 1/2 cucharadita de sal.',
+      'Si tienes a mano limón o naranja, agrégalo para aportar potasio y mejorar sabor.',
+      'Bebe a pequeños sorbos frecuentes cada 20 minutos, nunca un litro de golpe.',
+      'Para purificar agua dudosa: hierve 3 minutos a fuego vivo o añade 2 gotas de cloro comercial por litro y espera 30 minutos.'
+    ],
+    alerta_medica: 'Signos de deshidratación grave: boca reseca, ojos hundidos, orina oscura o ausente, pulso acelerado o confusión.',
+    orden: 2,
+    creado_por: null,
+    creado_en: '2026-01-01T00:00:00Z',
+    actualizado_en: '2026-01-01T00:00:00Z',
+    eliminado_en: null,
+  },
+  {
+    id: 3,
+    slug: 'prevencion-golpe-calor',
+    categoria: 'calor',
+    titulo: 'Prevención de golpe de calor e insolación',
+    resumen: 'Las temperaturas en las costas y fronteras pueden superar los 35°C. El golpe de calor puede ser mortal.',
+    instrucciones: [
+      'Camina en horas frescas (5:00 a 11:00 AM) y resguárdate bajo sombra entre 11:30 AM y 3:30 PM.',
+      'Cubre cabeza y nuca con tela clara humedecida con agua fresca.',
+      'Usa ropa suelta y de colores claros que permita la transpiración.',
+      'Primeros auxilios: llevar a la sombra, aflojar ropa, poner paños frescos en cuello, axilas e ingle y dar suero despacio.'
+    ],
+    alerta_medica: 'Si la persona deja de sudar, tiene la piel ardiendo y enrojecida o pierde el conocimiento, llama urgentemente al 122 o 125.',
+    orden: 3,
+    creado_por: null,
+    creado_en: '2026-01-01T00:00:00Z',
+    actualizado_en: '2026-01-01T00:00:00Z',
+    eliminado_en: null,
+  },
+  {
+    id: 4,
+    slug: 'primeros-auxilios-emocionales',
+    categoria: 'emocional',
+    titulo: 'Primeros auxilios emocionales y manejo de crisis',
+    resumen: 'El miedo, la incertidumbre y el agotamiento son normales en la ruta. Cuidar tu mente te ayuda a tomar decisiones seguras.',
+    instrucciones: [
+      'Técnica 4-4-4: inhala por la nariz en 4 segundos, retén 4 segundos y exhala suavemente por la boca en 4 segundos.',
+      'Anclaje sensorial en pánico: nombra 5 cosas que ves, 4 que tocas, 3 que oyes y 2 que hueles.',
+      'Con la niñez: háblales con voz calmada, asegúrales que están juntos y evita transmitir rumores alarmistas.',
+      'Acuerda una palabra clave con tu acompañante para avisar si necesitas parar o sientes riesgo.'
+    ],
+    alerta_medica: 'Si sientes desespero extremo o pensamientos de autolesión, PDH (1555) y Cruz Roja (125) brindan apoyo psicológico confidencial.',
+    orden: 4,
+    creado_por: null,
+    creado_en: '2026-01-01T00:00:00Z',
+    actualizado_en: '2026-01-01T00:00:00Z',
+    eliminado_en: null,
+  },
+  {
+    id: 5,
+    slug: 'salud-mujeres-gestantes',
+    categoria: 'mujeres',
+    titulo: 'Salud de mujeres, gestantes e infancia',
+    resumen: 'Pautas de cuidado prioritario para mujeres embarazadas, madres en lactancia y niñas en tránsito.',
+    instrucciones: [
+      'En embarazo: lleva tu carné de control médico o historial en bolsa hermética pegada a tu cuerpo.',
+      'Descansa con las piernas en alto al menos 20 minutos cada 2 horas de caminata continua.',
+      'Lactancia materna: el pecho es el alimento más limpio y seguro para tu bebé; no lo suspendas.',
+      'Higiene íntima: cambia compresas limpias con frecuencia; evita usar telas sin hervir previamente.'
+    ],
+    alerta_medica: 'Señales de alarma obstétrica: sangrado vaginal, pérdida de líquido, dolor cólico fuerte o si el bebé deja de moverse.',
+    orden: 5,
+    creado_por: null,
+    creado_en: '2026-01-01T00:00:00Z',
+    actualizado_en: '2026-01-01T00:00:00Z',
+    eliminado_en: null,
+  },
+];
+
+export const REPORTES_INICIALES: ReporteConPublicacion[] = [
+  {
+    id: 1,
+    publicacion_id: 2,
+    reportado_por: null,
+    motivo: 'Verificación de alerta: Mención de cobros sospechosos en terminal. Requiere revisión de seguridad.',
+    estado: 'pendiente',
+    creado_en: '2026-10-29T10:15:00Z',
+    publicacion: PUBLICACIONES_INICIALES[1],
+  },
+];
+

@@ -73,3 +73,23 @@ export interface Reporte {
   estado: EstadoReporte;
   creado_en: string;
 }
+
+export interface ReporteConPublicacion extends Reporte {
+  publicacion?: PublicacionConCategoria | null;
+}
+
+export interface GuiaSalud {
+  id: number;
+  slug: string;
+  categoria: 'pies' | 'hidratacion' | 'calor' | 'emocional' | 'mujeres' | 'general';
+  titulo: string;
+  resumen: string;
+  instrucciones: string[];
+  alerta_medica: string | null;
+  orden: number;
+  creado_por: string | null;
+  creado_en: string;
+  actualizado_en: string;
+  eliminado_en: string | null;
+}
+

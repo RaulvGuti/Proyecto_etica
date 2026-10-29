@@ -3,26 +3,26 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import {
-  GUIAS_SALUD,
+  GUIAS_SALUD_DB_INICIALES,
   ORGANIZACIONES_INICIALES,
   CIUDADES_INICIALES,
-  GuiaAutocuidado,
 } from "@/lib/initialData";
-import { OrganizacionConDetalles } from "@/types/database";
+import { OrganizacionConDetalles, GuiaSalud } from "@/types/database";
 
 export default function SaludPage() {
   const [organizacionesSalud, setOrganizacionesSalud] = useState<OrganizacionConDetalles[]>(
     ORGANIZACIONES_INICIALES.filter((org) => org.tipo?.nombre === "Salud" || org.tipo_id === 2)
   );
+  const [guias, setGuias] = useState<GuiaSalud[]>(GUIAS_SALUD_DB_INICIALES);
   const [ciudadSeleccionada, setCiudadSeleccionada] = useState<string>("todas");
-  const [guiaAbierta, setGuiaAbierta] = useState<string>("pies");
+  const [guiaAbierta, setGuiaAbierta] = useState<string>("cuidado-pies-ampollas");
   const [vistaActiva, setVistaActiva] = useState<"guias" | "puntos">("guias");
 
   useEffect(() => {
     async function cargarSaludSupabase() {
       try {
         const supabase = createClient();
-        // Consultar organizaciones de salud respetando las migraciones 00002 y 00004
+        // Consultar organizaciones de salud respetando 00002 y 00004
         const { data, error } = await supabase
           .from("organizaciones")
           .select("*, ciudad:ciudades(*), tipo:tipos_organizacion(*)")
@@ -36,6 +36,17 @@ export default function SaludPage() {
             setOrganizacionesSalud(soloSalud);
           }
         }
+
+        // Consultar guías de salud y autocuidado de 00011_guias_salud.sql
+        const { data: dataGuias, error: errorGuias } = await supabase
+          .from("guias_salud")
+          .select("*")
+          .is("eliminado_en", null)
+          .order("orden", { ascending: true });
+
+        if (!errorGuias && dataGuias && dataGuias.length > 0) {
+          setGuias(dataGuias as GuiaSalud[]);
+        }
       } catch {
         // En caso de estar fuera de línea o sin contenedor local activo, se mantiene el estado inicial
       }
@@ -43,6 +54,7 @@ export default function SaludPage() {
 
     cargarSaludSupabase();
   }, []);
+
 
   const organizacionesFiltradas = organizacionesSalud.filter((org) => {
     if (ciudadSeleccionada === "todas") return true;
@@ -123,18 +135,18 @@ export default function SaludPage() {
           </div>
 
           <div className="guides-container">
-            {GUIAS_SALUD.map((guia: GuiaAutocuidado) => {
-              const estaAbierta = guiaAbierta === guia.id;
+            {guias.map((guia: GuiaSalud) => {
+              const estaAbierta = guiaAbierta === guia.slug;
               return (
                 <article key={guia.id} className="guide-item">
                   <div
                     className="guide-header"
-                    onClick={() => setGuiaAbierta(estaAbierta ? "" : guia.id)}
+                    onClick={() => setGuiaAbierta(estaAbierta ? "" : guia.slug)}
                     role="button"
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
-                        setGuiaAbierta(estaAbierta ? "" : guia.id);
+                        setGuiaAbierta(estaAbierta ? "" : guia.slug);
                       }
                     }}
                   >
@@ -155,10 +167,10 @@ export default function SaludPage() {
                         ))}
                       </ul>
 
-                      {guia.alertaMedica && (
+                      {guia.alerta_medica && (
                         <div className="guide-alert">
                           <strong>⚠️ Señal de Alarma Médica: </strong>
-                          {guia.alertaMedica}
+                          {guia.alerta_medica}
                         </div>
                       )}
                     </div>

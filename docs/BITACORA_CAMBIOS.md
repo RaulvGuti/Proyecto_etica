@@ -11,6 +11,7 @@
 
 - [Entrada 001 - 2026-10-19: Implementacion de Workflows de GitHub, Gobernanza en Espanol y Documentacion](#entrada-001---2026-10-19-implementacion-de-workflows-de-github-gobernanza-en-espanol-y-documentacion)
 - [Entrada 002 - 2026-10-29: Implementacion de las Paginas de Salud, Comunidad y Directorio](#entrada-002---2026-10-29-implementacion-de-las-paginas-de-salud-comunidad-y-directorio)
+- [Entrada 003 - 2026-10-29: Migracion de Guias de Salud y Panel Unificado de Administracion y Moderacion](#entrada-003---2026-10-29-migracion-de-guias-de-salud-y-panel-unificado-de-administracion-y-moderacion)
 
 ---
 
@@ -137,4 +138,47 @@ Con las premisas de basarse fielmente en el frontend existente, conectarse profu
 - `npm run lint`: Exito (0 advertencias, 0 errores).
 - `npm run typecheck`: Exito (TypeScript compila sin errores).
 - `npm run build`: Exito (Build de produccion Next.js 16 generado con Turbopack; las 4 rutas `/`, `/salud`, `/comunidad`, `/directorio` pre-renderizadas exitosamente).
+
+---
+
+## Entrada 003 - 2026-10-29: Migracion de Guias de Salud y Panel Unificado de Administracion y Moderacion
+
+### 1. Contexto y Solicitud del Usuario
+El usuario solicito:
+1. Crear una nueva migracion de base de datos para almacenar y administrar la informacion de autocuidado y salud.
+2. Implementar la recepcion de reportes de la comunidad para que el administrador pueda revisarlos, descartarlos u ocultar/retirar publicaciones infractoras.
+3. Permitir que solo el administrador pueda registrar, verificar y dar de alta organizaciones en el directorio oficial.
+4. Unificar temporalmente las 3 areas de administracion en un solo panel para facilitar la entrega y evaluacion inmediata del proyecto.
+
+### 2. Decisiones Arquitectonicas y de Base de Datos
+- **Nueva Migracion Inmutable de Supabase (`00011_guias_salud.sql`)**:
+  - Se creo cumpliendo estrictamente el patron `^[0-9]{5}_[a-z0-9_]+\.sql$` sin modificar migraciones previas.
+  - Tabla `public.guias_salud`: campos `id`, `slug`, `categoria`, `titulo`, `resumen`, `instrucciones` (`text[]`), `alerta_medica`, `orden`, `creado_por`, `creado_en`, `actualizado_en`, `eliminado_en`.
+  - Trigger `trg_guias_salud_actualizado` conectado a `public.actualizar_timestamp()`.
+  - Politicas RLS estrictas: lectura publica para registros no eliminados (`eliminado_en is null`), insercion, actualizacion y borrado restringidos exclusivamente a `public.es_moderador()`.
+  - Indice `idx_guias_salud_categoria`.
+  - Carga automatica de datos semilla de guias de salud humanitarias.
+- **Panel Unificado de Administracion (`src/app/admin/page.tsx`)**:
+  - **Pestana 1 (Comunidad y Moderacion)**: Bandeja de entrada de reportes eticos conectados a `public.reportes` y `public.publicaciones`. Permite visualizar el motivo de la denuncia, el autor y texto original, con botones de accion rapida para descartar el reporte o sancionar la publicacion marcandola como `oculto` (retirandola de inmediato del feed publico).
+  - **Pestana 2 (Salud y Autocuidado)**: Formulario completo para publicar nuevas guias medicas y pasos de auxilio en ruta, y tabla con accion de dar de baja.
+  - **Pestana 3 (Directorio Oficial)**: Modulo exclusivo para registrar formalmente albergues, clinicas, comedores y defensorias legales con seleccion de ciudad y tipo, asignacion del sello de verificacion oficial y gestion de bajas.
+- **Navegacion y Diseno**:
+  - Se anadio el enlace directo al panel de control en `NavBar.tsx` (`Administración 🛡️`).
+  - Se incorporaron estilos para tablas administrativas, tarjetas de reporte con alertas de color e indicadores de estado (`badge-pendiente`, `badge-revisado`, `badge-descartado`).
+
+### 3. Archivos Tocados y Creados
+- [supabase/migrations/00011_guias_salud.sql](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/supabase/migrations/00011_guias_salud.sql) (Nuevo: migracion de guias de salud)
+- [src/types/database.ts](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/types/database.ts) (Modificado: interfaces `GuiaSalud` y `ReporteConPublicacion`)
+- [src/lib/initialData.ts](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/lib/initialData.ts) (Modificado: datos iniciales para reportes y guias de salud)
+- [src/app/salud/page.tsx](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/app/salud/page.tsx) (Modificado: conectado a la tabla `guias_salud`)
+- [src/app/admin/page.tsx](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/app/admin/page.tsx) (Nuevo: panel unificado de administracion con las 3 areas)
+- [src/components/NavBar.tsx](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/components/NavBar.tsx) (Modificado: enlace de navegacion a administracion)
+- [src/styles/globals.css](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/src/styles/globals.css) (Modificado: clases CSS para panel, reportes y tablas de admin)
+- [docs/BITACORA_CAMBIOS.md](file:///c:/Users/Usuario/Documents/GitHub/Proyecto_etica/docs/BITACORA_CAMBIOS.md) (Modificado: registro acumulativo de esta intervencion)
+
+### 4. Verificacion Realizada
+- `npm run lint`: Exito (0 advertencias, 0 errores).
+- `npm run typecheck`: Exito (TypeScript compila sin errores).
+- `npm run build`: Exito (Build de produccion Next.js 16 generado con Turbopack; 5 rutas `/`, `/salud`, `/comunidad`, `/directorio`, `/admin` pre-renderizadas exitosamente).
+
 

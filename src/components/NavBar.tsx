@@ -8,7 +8,9 @@ const links = [
   { href: "/salud", label: "Salud y Autocuidado" },
   { href: "/comunidad", label: "Comunidad" },
   { href: "/directorio", label: "Directorio" },
+  { href: "/admin", label: "Administración 🛡️" },
 ];
+
 
 export default function NavBar() {
   const pathname = usePathname();
