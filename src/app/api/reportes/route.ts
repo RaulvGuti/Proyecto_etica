@@ -23,15 +23,13 @@ export async function POST(request: Request) {
     }
 
     const supabase = createPublicServerClient();
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("reportes")
       .insert({
         publicacion_id: Number(publicacion_id),
         motivo: motivo.trim(),
         estado: "pendiente",
-      })
-      .select()
-      .single();
+      });
 
     if (error) {
       return NextResponse.json(
@@ -46,7 +44,6 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       mensaje: "Reporte registrado para moderación.",
-      reporte: data,
     });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error interno";

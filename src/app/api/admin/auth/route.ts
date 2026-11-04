@@ -37,9 +37,13 @@ export async function POST(request: Request) {
     }
 
     const cookieStore = await cookies();
+    const esHttps =
+      request.headers.get("x-forwarded-proto") === "https" ||
+      new URL(request.url).protocol === "https:";
+
     cookieStore.set(ADMIN_CONFIG.cookieName, ADMIN_CONFIG.tokenSecretValue, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
+      secure: esHttps,
       sameSite: "lax",
       path: "/",
       maxAge: 60 * 60 * 24, // 24 horas

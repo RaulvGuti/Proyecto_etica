@@ -11,7 +11,7 @@ export async function GET() {
       supabase
         .from("publicaciones")
         .select("*, categoria:categorias(*)")
-        .eq("estado", "visible")
+        .neq("estado", "oculto")
         .is("eliminado_en", null)
         .order("creado_en", { ascending: false })
         .retry(false),

@@ -1,14 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
-import {
-  GUIAS_SALUD_DB_INICIALES,
-  ORGANIZACIONES_INICIALES,
-  REPORTES_INICIALES,
-  CIUDADES_INICIALES,
-  TIPOS_ORGANIZACION_INICIALES,
-} from "@/lib/initialData";
+import { useCallback, useEffect, useState } from "react";
 import {
   GuiaSalud,
   OrganizacionConDetalles,
@@ -17,21 +9,53 @@ import {
   TipoOrganizacion,
 } from "@/types/database";
 
+class ErrorAdmin extends Error {
+  status: number;
+
+  constructor(mensaje: string, status: number) {
+    super(mensaje);
+    this.status = status;
+  }
+}
+
+async function solicitarAdmin<T>(url: string, opciones?: RequestInit): Promise<T> {
+  const respuesta = await fetch(url, {
+    cache: "no-store",
+    ...opciones,
+  });
+  const json = await respuesta.json().catch(() => ({}));
+
+  if (!respuesta.ok) {
+    throw new ErrorAdmin(
+      json?.error || "No se pudo comunicar con el servidor de administración.",
+      respuesta.status
+    );
+  }
+
+  return json as T;
+}
 
 export default function AdminPage() {
+  const [verificandoSesion, setVerificandoSesion] = useState(true);
+  const [autenticado, setAutenticado] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [credenciales, setCredenciales] = useState({ email: "admin@puente.org", password: "" });
+  const [iniciandoSesion, setIniciandoSesion] = useState(false);
+  const [errorAuth, setErrorAuth] = useState<string | null>(null);
+  const [cargandoDatos, setCargandoDatos] = useState(false);
   const [tabActiva, setTabActiva] = useState<"salud" | "comunidad" | "directorio">("comunidad");
   const [mensajeNotificacion, setMensajeNotificacion] = useState<{ tipo: "exito" | "error"; texto: string } | null>(null);
 
   // ==========================================
   // ESTADO: COMUNIDAD Y REPORTES
   // ==========================================
-  const [reportes, setReportes] = useState<ReporteConPublicacion[]>(REPORTES_INICIALES);
+  const [reportes, setReportes] = useState<ReporteConPublicacion[]>([]);
   const [filtroEstadoReporte, setFiltroEstadoReporte] = useState<string>("pendiente");
 
   // ==========================================
   // ESTADO: SALUD Y AUTOCUIDADO
   // ==========================================
-  const [guias, setGuias] = useState<GuiaSalud[]>(GUIAS_SALUD_DB_INICIALES);
+  const [guias, setGuias] = useState<GuiaSalud[]>([]);
   const [formGuia, setFormGuia] = useState({
     titulo: "",
     slug: "",
@@ -46,9 +70,9 @@ export default function AdminPage() {
   // ==========================================
   // ESTADO: DIRECTORIO
   // ==========================================
-  const [organizaciones, setOrganizaciones] = useState<OrganizacionConDetalles[]>(ORGANIZACIONES_INICIALES);
-  const [ciudades] = useState<Ciudad[]>(CIUDADES_INICIALES);
-  const [tipos] = useState<TipoOrganizacion[]>(TIPOS_ORGANIZACION_INICIALES);
+  const [organizaciones, setOrganizaciones] = useState<OrganizacionConDetalles[]>([]);
+  const [ciudades, setCiudades] = useState<Ciudad[]>([]);
+  const [tipos, setTipos] = useState<TipoOrganizacion[]>([]);
   const [formOrg, setFormOrg] = useState({
     nombre: "",
     ciudad_id: 1,
@@ -60,54 +84,133 @@ export default function AdminPage() {
   });
   const [guardandoOrg, setGuardandoOrg] = useState(false);
 
-  // Carga inicial sincronizada con Supabase
+  const mostrarAviso = useCallback((texto: string, tipo: "exito" | "error" = "exito") => {
+    setMensajeNotificacion({ tipo, texto });
+    window.setTimeout(() => setMensajeNotificacion(null), 4500);
+  }, []);
+
+  const cargarDatosAdmin = useCallback(async () => {
+    setCargandoDatos(true);
+
+    try {
+      const [dataReportes, dataGuias, dataDirectorio] = await Promise.all([
+        solicitarAdmin<{ reportes: ReporteConPublicacion[] }>("/api/admin/moderacion"),
+        solicitarAdmin<{ guias: GuiaSalud[] }>("/api/admin/guias"),
+        solicitarAdmin<{
+          organizaciones: OrganizacionConDetalles[];
+          ciudades: Ciudad[];
+          tipos: TipoOrganizacion[];
+        }>("/api/admin/organizaciones"),
+      ]);
+
+      setReportes(dataReportes.reportes ?? []);
+      setGuias(dataGuias.guias ?? []);
+      setOrganizaciones(dataDirectorio.organizaciones ?? []);
+      setCiudades(dataDirectorio.ciudades ?? []);
+      setTipos(dataDirectorio.tipos ?? []);
+    } catch (err) {
+      if (err instanceof ErrorAdmin && err.status === 401) {
+        setAutenticado(false);
+      }
+
+      mostrarAviso(
+        err instanceof Error ? err.message : "No se pudieron cargar los datos de administración.",
+        "error"
+      );
+    } finally {
+      setCargandoDatos(false);
+    }
+  }, [mostrarAviso]);
+
   useEffect(() => {
-    async function sincronizarAdmin() {
+    let activo = true;
+
+    async function verificarSesion() {
       try {
-        const supabase = createClient();
+        const sesion = await solicitarAdmin<{
+          authenticated: boolean;
+          user?: { email: string };
+        }>("/api/admin/auth");
 
-        // 1. Cargar reportes con sus publicaciones
-        const { data: dataReportes, error: errReportes } = await supabase
-          .from("reportes")
-          .select("*, publicacion:publicaciones(*, categoria:categorias(*))")
-          .order("creado_en", { ascending: false });
+        if (!activo) return;
 
-        if (!errReportes && dataReportes && dataReportes.length > 0) {
-          setReportes(dataReportes as ReporteConPublicacion[]);
+        setAdminEmail(sesion.user?.email ?? "");
+        setAutenticado(true);
+        await cargarDatosAdmin();
+      } catch (err) {
+        if (!activo) return;
+
+        setAutenticado(false);
+
+        if (!(err instanceof ErrorAdmin && err.status === 401)) {
+          mostrarAviso(
+            err instanceof Error ? err.message : "No se pudo verificar la sesión.",
+            "error"
+          );
         }
-
-        // 2. Cargar guías de salud
-        const { data: dataGuias, error: errGuias } = await supabase
-          .from("guias_salud")
-          .select("*")
-          .is("eliminado_en", null)
-          .order("orden", { ascending: true });
-
-        if (!errGuias && dataGuias && dataGuias.length > 0) {
-          setGuias(dataGuias as GuiaSalud[]);
-        }
-
-        // 3. Cargar organizaciones
-        const { data: dataOrgs, error: errOrgs } = await supabase
-          .from("organizaciones")
-          .select("*, ciudad:ciudades(*), tipo:tipos_organizacion(*)")
-          .is("eliminado_en", null)
-          .order("id", { ascending: false });
-
-        if (!errOrgs && dataOrgs && dataOrgs.length > 0) {
-          setOrganizaciones(dataOrgs as OrganizacionConDetalles[]);
-        }
-      } catch {
-        // Modo offline / desarrollo local sin servidor Supabase activo
+      } finally {
+        if (activo) setVerificandoSesion(false);
       }
     }
 
-    sincronizarAdmin();
-  }, []);
+    verificarSesion();
 
-  function mostrarAviso(texto: string, tipo: "exito" | "error" = "exito") {
-    setMensajeNotificacion({ tipo, texto });
-    setTimeout(() => setMensajeNotificacion(null), 4500);
+    return () => {
+      activo = false;
+    };
+  }, [cargarDatosAdmin, mostrarAviso]);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    setIniciandoSesion(true);
+    setErrorAuth(null);
+
+    try {
+      const sesion = await solicitarAdmin<{
+        success: boolean;
+        user: { email: string };
+      }>("/api/admin/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credenciales),
+      });
+
+      setAdminEmail(sesion.user?.email ?? credenciales.email);
+      setAutenticado(true);
+      setCredenciales((prev) => ({ ...prev, password: "" }));
+      await cargarDatosAdmin();
+    } catch (err) {
+      setErrorAuth(
+        err instanceof Error ? err.message : "No se pudo iniciar sesión. Inténtalo de nuevo."
+      );
+    } finally {
+      setIniciandoSesion(false);
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await solicitarAdmin("/api/admin/auth", { method: "DELETE" });
+    } catch {
+      // La cookie se elimina en el servidor; limpiamos el estado local igualmente.
+    } finally {
+      setAutenticado(false);
+      setAdminEmail("");
+      setReportes([]);
+      setGuias([]);
+      setOrganizaciones([]);
+      setCiudades([]);
+      setTipos([]);
+      setErrorAuth(null);
+    }
+  }
+
+  function manejarErrorAccion(err: unknown, mensaje: string) {
+    if (err instanceof ErrorAdmin && err.status === 401) {
+      setAutenticado(false);
+    }
+
+    mostrarAviso(err instanceof Error ? err.message : mensaje, "error");
   }
 
   // ==========================================
@@ -115,55 +218,38 @@ export default function AdminPage() {
   // ==========================================
   async function handleOcultarPublicacion(reporte: ReporteConPublicacion) {
     try {
-      const supabase = createClient();
+      await solicitarAdmin("/api/admin/moderacion", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accion: "ocultar",
+          reporteId: reporte.id,
+          publicacionId: reporte.publicacion_id,
+        }),
+      });
 
-      // Ocultar publicación en la base de datos
-      await supabase
-        .from("publicaciones")
-        .update({ estado: "oculto" })
-        .eq("id", reporte.publicacion_id);
-
-      // Marcar reporte como revisado
-      await supabase
-        .from("reportes")
-        .update({ estado: "revisado" })
-        .eq("id", reporte.id);
-    } catch {
-      // Ignorar error si offline
+      mostrarAviso(
+        `Publicación #${reporte.publicacion_id} ocultada y retirada del feed. Reporte resuelto.`
+      );
+      await cargarDatosAdmin();
+    } catch (err) {
+      manejarErrorAccion(err, "No se pudo ocultar la publicación.");
     }
-
-    // Actualizar estado local reactivo
-    setReportes((prev) =>
-      prev.map((r) =>
-        r.id === reporte.id
-          ? {
-              ...r,
-              estado: "revisado",
-              publicacion: r.publicacion ? { ...r.publicacion, estado: "oculto" } : null,
-            }
-          : r
-      )
-    );
-
-    mostrarAviso(`Publicación #${reporte.publicacion_id} ocultada y retirada del feed. Reporte resuelto.`);
   }
 
   async function handleDescartarReporte(reporteId: number) {
     try {
-      const supabase = createClient();
-      await supabase
-        .from("reportes")
-        .update({ estado: "descartado" })
-        .eq("id", reporteId);
-    } catch {
-      // Ignorar error si offline
+      await solicitarAdmin("/api/admin/moderacion", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ accion: "descartar", reporteId }),
+      });
+
+      mostrarAviso("Reporte descartado. La publicación permanece visible.");
+      await cargarDatosAdmin();
+    } catch (err) {
+      manejarErrorAccion(err, "No se pudo descartar el reporte.");
     }
-
-    setReportes((prev) =>
-      prev.map((r) => (r.id === reporteId ? { ...r, estado: "descartado" } : r))
-    );
-
-    mostrarAviso("Reporte descartado. La publicación permanece visible.");
   }
 
   // ==========================================
@@ -186,26 +272,11 @@ export default function AdminPage() {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
-    const nuevaGuia: GuiaSalud = {
-      id: Date.now(),
-      slug: slugCalculado,
-      categoria: formGuia.categoria,
-      titulo: formGuia.titulo.trim(),
-      resumen: formGuia.resumen.trim(),
-      instrucciones: instruccionesArray,
-      alerta_medica: formGuia.alerta_medica.trim() || null,
-      orden: Number(formGuia.orden) || 1,
-      creado_por: null,
-      creado_en: new Date().toISOString(),
-      actualizado_en: new Date().toISOString(),
-      eliminado_en: null,
-    };
-
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("guias_salud")
-        .insert({
+      await solicitarAdmin("/api/admin/guias", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           slug: slugCalculado,
           categoria: formGuia.categoria,
           titulo: formGuia.titulo.trim(),
@@ -213,19 +284,9 @@ export default function AdminPage() {
           instrucciones: instruccionesArray,
           alerta_medica: formGuia.alerta_medica.trim() || null,
           orden: Number(formGuia.orden) || 1,
-        })
-        .select()
-        .single();
+        }),
+      });
 
-      if (!error && data) {
-        setGuias([...guias, data as GuiaSalud]);
-      } else {
-        setGuias([...guias, nuevaGuia]);
-      }
-    } catch {
-      setGuias([...guias, nuevaGuia]);
-    } finally {
-      setGuardandoGuia(false);
       setFormGuia({
         titulo: "",
         slug: "",
@@ -236,22 +297,22 @@ export default function AdminPage() {
         orden: guias.length + 2,
       });
       mostrarAviso("¡Nueva guía de salud guardada y publicada exitosamente!");
+      await cargarDatosAdmin();
+    } catch (err) {
+      manejarErrorAccion(err, "No se pudo guardar la guía de salud.");
+    } finally {
+      setGuardandoGuia(false);
     }
   }
 
   async function handleEliminarGuia(guiaId: number) {
     try {
-      const supabase = createClient();
-      await supabase
-        .from("guias_salud")
-        .update({ eliminado_en: new Date().toISOString() })
-        .eq("id", guiaId);
-    } catch {
-      // Ignorar error si offline
+      await solicitarAdmin(`/api/admin/guias?id=${guiaId}`, { method: "DELETE" });
+      mostrarAviso("Guía de salud retirada de la sección pública.");
+      await cargarDatosAdmin();
+    } catch (err) {
+      manejarErrorAccion(err, "No se pudo retirar la guía de salud.");
     }
-
-    setGuias((prev) => prev.filter((g) => g.id !== guiaId));
-    mostrarAviso("Guía de salud retirada de la sección pública.");
   }
 
   // ==========================================
@@ -262,31 +323,12 @@ export default function AdminPage() {
     if (!formOrg.nombre.trim()) return;
 
     setGuardandoOrg(true);
-    const ciudadObj = ciudades.find((c) => c.id === Number(formOrg.ciudad_id));
-    const tipoObj = tipos.find((t) => t.id === Number(formOrg.tipo_id));
-
-    const nuevaOrgLocal: OrganizacionConDetalles = {
-      id: Date.now(),
-      nombre: formOrg.nombre.trim(),
-      ciudad_id: Number(formOrg.ciudad_id),
-      tipo_id: Number(formOrg.tipo_id),
-      telefono: formOrg.telefono.trim() || null,
-      sitio_web: formOrg.sitio_web.trim() || null,
-      nota: formOrg.nota.trim() || null,
-      verificado: formOrg.verificado,
-      creado_por: null,
-      creado_en: new Date().toISOString(),
-      actualizado_en: new Date().toISOString(),
-      eliminado_en: null,
-      ciudad: ciudadObj,
-      tipo: tipoObj,
-    };
 
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("organizaciones")
-        .insert({
+      await solicitarAdmin("/api/admin/organizaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           nombre: formOrg.nombre.trim(),
           ciudad_id: Number(formOrg.ciudad_id),
           tipo_id: Number(formOrg.tipo_id),
@@ -294,19 +336,9 @@ export default function AdminPage() {
           sitio_web: formOrg.sitio_web.trim() || null,
           nota: formOrg.nota.trim() || null,
           verificado: formOrg.verificado,
-        })
-        .select("*, ciudad:ciudades(*), tipo:tipos_organizacion(*)")
-        .single();
+        }),
+      });
 
-      if (!error && data) {
-        setOrganizaciones([data as OrganizacionConDetalles, ...organizaciones]);
-      } else {
-        setOrganizaciones([nuevaOrgLocal, ...organizaciones]);
-      }
-    } catch {
-      setOrganizaciones([nuevaOrgLocal, ...organizaciones]);
-    } finally {
-      setGuardandoOrg(false);
       setFormOrg({
         nombre: "",
         ciudad_id: 1,
@@ -317,40 +349,39 @@ export default function AdminPage() {
         verificado: true,
       });
       mostrarAviso("¡Organización añadida oficialmente al directorio público!");
+      await cargarDatosAdmin();
+    } catch (err) {
+      manejarErrorAccion(err, "No se pudo guardar la organización.");
+    } finally {
+      setGuardandoOrg(false);
     }
   }
 
   async function handleToggleVerificacionOrg(org: OrganizacionConDetalles) {
     const nuevoEstado = !org.verificado;
-    try {
-      const supabase = createClient();
-      await supabase
-        .from("organizaciones")
-        .update({ verificado: nuevoEstado })
-        .eq("id", org.id);
-    } catch {
-      // Ignorar si offline
-    }
 
-    setOrganizaciones((prev) =>
-      prev.map((o) => (o.id === org.id ? { ...o, verificado: nuevoEstado } : o))
-    );
-    mostrarAviso(`Organización ${nuevoEstado ? "verificada" : "desmarcada"}.`);
+    try {
+      await solicitarAdmin("/api/admin/organizaciones", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: org.id, verificado: nuevoEstado }),
+      });
+
+      mostrarAviso(`Organización ${nuevoEstado ? "verificada" : "desmarcada"}.`);
+      await cargarDatosAdmin();
+    } catch (err) {
+      manejarErrorAccion(err, "No se pudo actualizar la verificación.");
+    }
   }
 
   async function handleEliminarOrg(orgId: number) {
     try {
-      const supabase = createClient();
-      await supabase
-        .from("organizaciones")
-        .update({ eliminado_en: new Date().toISOString() })
-        .eq("id", orgId);
-    } catch {
-      // Ignorar si offline
+      await solicitarAdmin(`/api/admin/organizaciones?id=${orgId}`, { method: "DELETE" });
+      mostrarAviso("Organización dada de baja del directorio.");
+      await cargarDatosAdmin();
+    } catch (err) {
+      manejarErrorAccion(err, "No se pudo dar de baja la organización.");
     }
-
-    setOrganizaciones((prev) => prev.filter((o) => o.id !== orgId));
-    mostrarAviso("Organización dada de baja del directorio.");
   }
 
   // Filtrado de reportes
@@ -358,6 +389,93 @@ export default function AdminPage() {
     if (filtroEstadoReporte === "todos") return true;
     return r.estado === filtroEstadoReporte;
   });
+
+  if (verificandoSesion) {
+    return (
+      <main className="page-container">
+        <div className="loading-state-card" style={{ marginTop: "40px" }}>
+          <div className="spinner" />
+          <p>Verificando sesión de administración...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!autenticado) {
+    return (
+      <main className="page-container">
+        <header className="page-header">
+          <div className="page-header-top">
+            <div>
+              <div style={{ marginBottom: "10px" }}>
+                <span className="admin-badge">🛡️ Acceso Restringido</span>
+              </div>
+              <h1 className="page-title">Administración de Puente</h1>
+              <p className="page-desc">
+                Inicia sesión para moderar la comunidad, gestionar guías de salud y administrar el
+                directorio oficial de contactos.
+              </p>
+            </div>
+          </div>
+        </header>
+
+        <section className="content-card" style={{ maxWidth: "520px", margin: "24px auto 0" }}>
+          <div className="admin-card-header">
+            <h3>Iniciar sesión</h3>
+            <span className="badge badge-verificado">Solo personal autorizado</span>
+          </div>
+
+          <form onSubmit={handleLogin}>
+            <div className="form-group">
+              <label className="form-label" htmlFor="admin-email">
+                Correo o usuario:
+              </label>
+              <input
+                id="admin-email"
+                type="text"
+                className="form-input"
+                value={credenciales.email}
+                onChange={(e) => setCredenciales({ ...credenciales, email: e.target.value })}
+                autoComplete="username"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="admin-password">
+                Contraseña:
+              </label>
+              <input
+                id="admin-password"
+                type="password"
+                className="form-input"
+                value={credenciales.password}
+                onChange={(e) => setCredenciales({ ...credenciales, password: e.target.value })}
+                autoComplete="current-password"
+                required
+              />
+            </div>
+
+            {errorAuth && (
+              <p style={{ color: "var(--danger)", fontWeight: 600, margin: "0 0 12px" }}>
+                {errorAuth}
+              </p>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "16px" }}>
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={iniciandoSesion || !credenciales.password.trim()}
+              >
+                {iniciandoSesion ? "Ingresando..." : "Ingresar al panel"}
+              </button>
+            </div>
+          </form>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="page-container">
@@ -373,6 +491,13 @@ export default function AdminPage() {
               Control de contenidos de salud, moderación ética de publicaciones comunitarias
               y administración exclusiva del directorio oficial de recursos.
             </p>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <span className="card-meta">{adminEmail}</span>
+            <button type="button" className="btn btn-outline btn-sm" onClick={handleLogout}>
+              Cerrar sesión
+            </button>
           </div>
         </div>
 
@@ -392,6 +517,12 @@ export default function AdminPage() {
           </div>
         )}
       </header>
+
+      {cargandoDatos && (
+        <p style={{ marginTop: "14px", color: "var(--muted)", fontSize: "0.9rem" }}>
+          Sincronizando datos con Supabase...
+        </p>
+      )}
 
       {/* Pestañas de Navegación del Administrador */}
       <nav className="admin-nav-tabs">

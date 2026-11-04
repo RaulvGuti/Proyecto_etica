@@ -13,17 +13,28 @@ export async function GET() {
 
   try {
     const supabase = createAdminServerClient();
-    const { data, error } = await supabase
-      .from("organizaciones")
-      .select("*, ciudad:ciudades(*), tipo:tipos_organizacion(*)")
-      .is("eliminado_en", null)
-      .order("id", { ascending: false });
+    const [respuestaOrganizaciones, respuestaCiudades, respuestaTipos] = await Promise.all([
+      supabase
+        .from("organizaciones")
+        .select("*, ciudad:ciudades(*), tipo:tipos_organizacion(*)")
+        .is("eliminado_en", null)
+        .order("id", { ascending: false }),
+      supabase.from("ciudades").select("*").order("nombre", { ascending: true }),
+      supabase.from("tipos_organizacion").select("*").order("id", { ascending: true }),
+    ]);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (respuestaOrganizaciones.error) {
+      return NextResponse.json(
+        { error: respuestaOrganizaciones.error.message },
+        { status: 500 }
+      );
     }
 
-    return NextResponse.json({ organizaciones: data ?? [] });
+    return NextResponse.json({
+      organizaciones: respuestaOrganizaciones.data ?? [],
+      ciudades: respuestaCiudades.data ?? [],
+      tipos: respuestaTipos.data ?? [],
+    });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error interno";
     return NextResponse.json({ error: msg }, { status: 500 });

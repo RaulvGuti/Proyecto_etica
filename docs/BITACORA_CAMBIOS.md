@@ -294,4 +294,121 @@ Se solicito desplegar el esquema local en Supabase Cloud, aplicando las migracio
 - La cookie de administracion se marca `Secure` en produccion; sobre HTTP local el navegador puede no enviarla, pero sobre HTTPS funciona correctamente.
 - Las migraciones existentes no se modificaron. Cualquier cambio futuro de esquema debe crear una nueva migracion `00014_...`.
 
+---
+
+## Entrada 007 - 2026-11-03: Poblado de Publicaciones y Correccion del Filtro Publico de Comunidad
+
+### 1. Contexto y Solicitud del Usuario
+Se reporto una discrepancia entre `/admin` y `/comunidad`: el panel mostraba 1 reporte pendiente sobre la publicacion #2 (`AlertaRuta`) con estado `visible`, mientras que la pagina publica mostraba `Todas (0)`. Se solicito verificar el contenido de `publicaciones`, poblar el seed en la nube, revisar el filtro del endpoint publico, confirmar que `AlertaRuta` se renderizara y registrar la intervencion.
+
+### 2. Diagnostico
+- La base remota tenia `publicaciones = 0` y `reportes = 0`; las 4 organizaciones y las 5 guias si estaban cargadas.
+- `/admin` inicializa sus estados con `REPORTES_INICIALES` y conserva esos datos cuando la consulta devuelve un arreglo vacio. Por eso mostraba el reporte de ejemplo sobre `AlertaRuta`, aunque no existia en la base.
+- `/comunidad` si reemplazaba su estado inicial con la respuesta real de `/api/publicaciones`; al recibir `[]`, mostraba `Todas (0)`.
+- El endpoint filtraba por `estado = 'visible'` y la politica RLS tambien exigia `estado = 'visible'`, una regla mas restrictiva que la solicitada.
+
+### 3. Cambios Realizados
+- [src/app/api/publicaciones/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/publicaciones/route.ts) (Modificado): el GET ahora usa `.neq("estado", "oculto")` y mantiene `.is("eliminado_en", null)`.
+- [supabase/migrations/00014_publicaciones_no_ocultas.sql](file:///c:/Users/usuario/documents/github/proyecto_etica/supabase/migrations/00014_publicaciones_no_ocultas.sql) (Nuevo): actualiza la politica RLS `publicaciones: lectura publica no ocultas` para permitir todo registro no oculto y no eliminado, manteniendo el acceso del autor y de moderadores.
+- [supabase/seed.sql](file:///c:/Users/usuario/documents/github/proyecto_etica/supabase/seed.sql) (Modificado):
+  - Se hicieron idempotentes las inserciones de ciudades y organizaciones.
+  - Se agregaron las 5 publicaciones de ejemplo con IDs explicitos; la publicacion #2 corresponde a `AlertaRuta`, categoria `Alerta`, `estado = 'visible'` y `autor_id = NULL`.
+  - Se agrego el reporte pendiente #1 asociado a la publicacion #2.
+  - Se ajustaron las secuencias de `publicaciones` y `reportes` con `setval`.
+- Migracion remota aplicada con `npx supabase db push --include-seed --yes`.
+- Como `db push` solo actualizo el hash del seed, los datos se cargaron con `npx supabase db query --linked --file supabase/seed.sql`.
+
+### 4. Verificacion Realizada
+- Base remota:
+  - `publicaciones`: 5 filas (IDs 1 a 5).
+  - `reportes`: 1 fila, `publicacion_id = 2`, `estado = 'pendiente'`.
+  - `organizaciones`: 4 filas (sin duplicados tras reejecutar el seed).
+- `GET /api/publicaciones`: `200`, `fuente: "supabase"`, 5 publicaciones.
+  - `id=2`, alias `AlertaRuta`, estado `visible`, categoria `Alerta`, `autor_id = NULL`.
+  - La publicacion sin perfil asociado se devuelve correctamente; la consulta no usa un join interno con `perfiles`.
+- `GET /api/admin/moderacion` con sesion: `200`, 1 reporte pendiente sobre `AlertaRuta`.
+- `/comunidad` y `/admin`: `200` con el servidor de produccion.
+- `npm run lint`: Exito (0 advertencias, 0 errores).
+- `npm run typecheck`: Exito (TypeScript compila sin errores).
+- `npm run build`: Exito (build de produccion Next.js 16 con Turbopack).
+
+### 5. Observaciones
+- El panel `/admin` sigue leyendo datos directamente con el cliente publico del navegador. Como RLS solo permite leer `reportes` a moderadores, el panel conserva `REPORTES_INICIALES`; ahora ese respaldo coincide con el reporte real sembrado. Migrar el panel a las API protegidas `/api/admin/*` queda como mejora recomendada para que las acciones de moderacion persistan realmente.
+- El seed de `publicaciones` usa IDs explicitos y `on conflict (id) do nothing`, por lo que puede ejecutarse nuevamente sin duplicar datos.
+- La regla publica queda alineada en API y RLS: `estado <> 'oculto'` y `eliminado_en IS NULL`.
+
+---
+
+## Entrada 008 - 2026-11-03: Conexion Real del Panel Admin, Sesion y Persistencia de Contactos
+
+### 1. Contexto y Solicitud del Usuario
+Se reporto que al actualizar `/admin` los cambios se reiniciaban, que el directorio de contactos no quedaba conectado con la base real y que las acciones administrativas no se reflejaban al recargar. Tambien se solicito revisar la maquetacion del panel.
+
+### 2. Diagnostico
+- `src/app/admin/page.tsx` inicializaba reportes, guias, organizaciones y catalogos con datos de respaldo y usaba el cliente anonimo del navegador. Al no tener permisos de moderador, RLS bloqueaba `reportes` y el panel conservaba datos ficticios.
+- Las rutas protegidas `/api/admin/*` ya existian, pero el panel no las consumia.
+- El formulario de directorio esperaba `ciudades` y `tipos`, pero `GET /api/admin/organizaciones` solo devolvia `organizaciones`.
+- No existia pantalla de login ni boton de cierre de sesion en el panel.
+- La cookie de administracion usaba `secure: NODE_ENV === "production"`, lo que impedia conservar la sesion sobre HTTP local con `next start`.
+
+### 3. Cambios Realizados
+- [src/app/admin/page.tsx](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/admin/page.tsx) (Modificado):
+  - Se eliminaron `createClient` y los datos iniciales; los estados arrancan vacios.
+  - Se agrego `solicitarAdmin` para consumir las APIs protegidas y `cargarDatosAdmin` para recargar reportes, guias, organizaciones, ciudades y tipos desde Supabase.
+  - Se agregaron verificacion de sesion, login, logout, manejo de errores y aviso de sincronizacion.
+  - Moderacion, alta/baja de guias y alta/edicion/verificacion/baja de organizaciones ahora usan `/api/admin/moderacion`, `/api/admin/guias` y `/api/admin/organizaciones`, recargando los datos despues de cada accion.
+  - La cabecera muestra el correo del administrador y el boton `Cerrar sesion`; sin sesion se muestra el formulario de acceso.
+- [src/app/api/admin/organizaciones/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/admin/organizaciones/route.ts) (Modificado): el GET ahora devuelve `organizaciones`, `ciudades` y `tipos` en paralelo.
+- [src/app/api/admin/auth/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/admin/auth/route.ts) (Modificado): la cookie se marca `Secure` solo si la peticion es HTTPS, usando `x-forwarded-proto` o el protocolo de la URL.
+- No se crearon ni modificaron migraciones; `00014_publicaciones_no_ocultas.sql` sigue siendo la ultima.
+
+### 4. Verificacion Realizada
+- `npm run lint`: Exito (0 advertencias, 0 errores).
+- `npm run typecheck`: Exito.
+- `npm run build`: Exito (Next.js 16.3.6 con Turbopack).
+- Servidor de produccion local en el puerto 3050:
+  - `POST /api/admin/auth`: `200`; la cookie se creo con `Secure=False` sobre HTTP.
+  - `GET /api/admin/auth`: `200`, `authenticated: true`.
+  - `GET /api/admin/moderacion`: 1 reporte.
+  - `GET /api/admin/guias`: 5 guias.
+  - `GET /api/admin/organizaciones`: 4 organizaciones, 3 ciudades y 6 tipos.
+  - Alta de organizacion temporal: persistio al recargar, la verificacion paso a `true` y la baja la retiro del listado.
+  - Alta de guia temporal: persistio al recargar y la baja la retiro del listado.
+  - Moderacion `descartar` sobre el reporte 1: el estado paso a `descartado` y se mantuvo al consultar de nuevo.
+- Limpieza posterior en Supabase: reporte 1 restaurado a `pendiente`; organizacion y guia temporales eliminadas definitivamente.
+- Estado final de la base: 5 publicaciones visibles, 1 reporte pendiente, 4 organizaciones activas y 5 guias activas.
+
+### 5. Observaciones
+- Las credenciales de administracion siguen definidas en `src/lib/adminAuth.ts`. Para produccion se recomienda moverlas a variables de entorno y cambiar la contrasena por defecto.
+- La prueba de interfaz fue funcional a nivel de compilacion y endpoints; no se ejecuto una prueba visual automatizada con navegador. La maquetacion nueva incluye login centrado, cabecera de sesion y aviso de sincronizacion.
+- No se ejecuto `supabase db reset` ni se alteraron migraciones existentes.
+
+---
+
+## Entrada 009 - 2026-11-03: Correccion del Registro de Reportes Comunitarios
+
+### 1. Contexto y Solicitud del Usuario
+Se reporto que los reportes enviados desde `/comunidad` no se estaban registrando en Supabase.
+
+### 2. Diagnostico
+- Se reprodujo el fallo con `POST /api/reportes`: respondia `500` con `new row violates row-level security policy for table "reportes"`.
+- La politica RLS de `INSERT` si permitia la operacion (`with check (true)`), pero la ruta usaba `.insert(...).select().single()`.
+- PostgREST necesita permiso de `SELECT` para devolver la fila insertada. La politica de lectura de `reportes` solo permite moderadores, por lo que el `RETURNING` fallaba como violacion de RLS.
+
+### 3. Cambios Realizados
+- [src/app/api/reportes/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/reportes/route.ts) (Modificado): se elimino `.select().single()` del insert. La ruta ahora inserta el reporte con el cliente publico y responde exito sin intentar leer la fila creada.
+- No se modificaron politicas RLS ni migraciones; el reporte sigue siendo anonimo y solo los moderadores pueden leerlo.
+
+### 4. Verificacion Realizada
+- `POST /api/reportes` con `publicacion_id=1`: `200`, `success: true`.
+- El reporte de prueba aparecio en `GET /api/admin/moderacion` con estado `pendiente`.
+- Se elimino el reporte de prueba de la base remota.
+- `npm run lint`: Exito (0 advertencias, 0 errores).
+- `npm run build`: Exito (Next.js 16.3.6 con Turbopack).
+- El reporte semilla #1 permanece en estado `revisado`; no fue alterado por esta correccion.
+
+### 5. Observaciones
+- No se agrego una politica `SELECT` publica para `reportes` porque expondria los motivos y datos de moderacion. La solucion correcta es no solicitar `RETURNING` en el insert anonimo.
+- Las acciones de moderacion siguen leyendo los reportes mediante las rutas protegidas `/api/admin/*`.
+
 
