@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   CATEGORIAS_INICIALES,
   PUBLICACIONES_INICIALES,
@@ -9,10 +8,15 @@ import {
 import { PublicacionConCategoria, Categoria } from "@/types/database";
 
 export default function ComunidadPage() {
-  const [publicaciones, setPublicaciones] = useState<PublicacionConCategoria[]>(PUBLICACIONES_INICIALES);
-  const [categorias] = useState<Categoria[]>(CATEGORIAS_INICIALES);
+  const [publicaciones, setPublicaciones] = useState<PublicacionConCategoria[]>(
+    PUBLICACIONES_INICIALES
+  );
+  const [categorias, setCategorias] = useState<Categoria[]>(CATEGORIAS_INICIALES);
   const [categoriaActiva, setCategoriaActiva] = useState<number | "todas">("todas");
   const [busqueda, setBusqueda] = useState<string>("");
+  const [cargando, setCargando] = useState<boolean>(true);
+  const [avisoDatos, setAvisoDatos] = useState<string | null>(null);
+  const [mensajeError, setMensajeError] = useState<string | null>(null);
 
   // Estado para el modal de nueva publicación
   const [mostrarModalNuevo, setMostrarModalNuevo] = useState<boolean>(false);
@@ -29,79 +33,106 @@ export default function ComunidadPage() {
   const [enviandoReporte, setEnviandoReporte] = useState<boolean>(false);
 
   useEffect(() => {
-    async function cargarPublicacionesSupabase() {
-      try {
-        const supabase = createClient();
-        // Consulta respetando 00005_publicaciones.sql y 00008_rls_policies.sql
-        const { data, error } = await supabase
-          .from("publicaciones")
-          .select("*, categoria:categorias(*)")
-          .eq("estado", "visible")
-          .order("creado_en", { ascending: false });
+    const controlador = new AbortController();
+    const temporizador = setTimeout(() => controlador.abort(), 6000);
 
-        if (!error && data && data.length > 0) {
-          setPublicaciones(data as PublicacionConCategoria[]);
+    async function cargarDatosComunidad() {
+      setCargando(true);
+      try {
+        const res = await fetch("/api/publicaciones", {
+          signal: controlador.signal,
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error("El servidor no devolvió una respuesta válida.");
         }
+
+        const json = await res.json();
+
+        if (Array.isArray(json.publicaciones)) {
+          setPublicaciones(json.publicaciones as PublicacionConCategoria[]);
+        }
+
+        if (Array.isArray(json.categorias) && json.categorias.length > 0) {
+          const categoriasServidor = json.categorias as Categoria[];
+          setCategorias(categoriasServidor);
+          setCategoriaSeleccionada((actual) =>
+            categoriasServidor.some((cat) => cat.id === actual)
+              ? actual
+              : categoriasServidor[0].id
+          );
+        }
+
+        setAvisoDatos(
+          typeof json.advertencia === "string" ? json.advertencia : null
+        );
       } catch {
-        // Mantiene el estado inicial en caso de desconexión o entorno local sin servicio
+        setAvisoDatos(
+          "No se pudo conectar con el servidor. Se muestran datos de respaldo."
+        );
+      } finally {
+        clearTimeout(temporizador);
+        setCargando(false);
       }
     }
 
-    cargarPublicacionesSupabase();
+    cargarDatosComunidad();
+
+    return () => {
+      clearTimeout(temporizador);
+      controlador.abort();
+    };
   }, []);
 
-  // Manejar el envío de una nueva publicación
+  // Manejar el envío de una nueva publicación con persistencia directa en Supabase
   async function handleSubmitPublicacion(e: React.FormEvent) {
     e.preventDefault();
     if (!textoPublicacion.trim() || textoPublicacion.length > 2000) return;
 
     setEnviando(true);
+    setMensajeError(null);
     const aliasFinal = esAnonimo ? "Anónimo" : alias.trim() || "Caminante";
-    const categoriaObj = categorias.find((c) => c.id === Number(categoriaSeleccionada)) || categorias[0];
-
-    const nuevaPubLocal: PublicacionConCategoria = {
-      id: Date.now(),
-      autor_id: null,
-      categoria_id: Number(categoriaSeleccionada),
-      alias_mostrado: aliasFinal,
-      texto: textoPublicacion.trim(),
-      anonimo: esAnonimo,
-      estado: "visible",
-      creado_en: new Date().toISOString(),
-      actualizado_en: new Date().toISOString(),
-      eliminado_en: null,
-      categoria: categoriaObj,
-    };
 
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from("publicaciones")
-        .insert({
+      const res = await fetch("/api/publicaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           categoria_id: Number(categoriaSeleccionada),
           alias_mostrado: aliasFinal,
           texto: textoPublicacion.trim(),
           anonimo: esAnonimo,
-          estado: "visible",
-        })
-        .select("*, categoria:categorias(*)")
-        .single();
+        }),
+      });
 
-      if (!error && data) {
-        setPublicaciones([data as PublicacionConCategoria, ...publicaciones]);
-      } else {
-        // En caso de inserción sin backend conectado o RLS anónimo, actualizar vista localmente
-        setPublicaciones([nuevaPubLocal, ...publicaciones]);
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "No se pudo guardar la publicación."
+        );
       }
-    } catch {
-      setPublicaciones([nuevaPubLocal, ...publicaciones]);
-    } finally {
-      setEnviando(false);
+
+      if (json.publicacion) {
+        setPublicaciones((prev) => [json.publicacion, ...prev]);
+      }
+
       setTextoPublicacion("");
       setAlias("");
       setMostrarModalNuevo(false);
-      setMensajeExito("¡Tu mensaje fue publicado exitosamente!");
+      setMensajeExito("¡Tu mensaje fue publicado exitosamente en la comunidad!");
       setTimeout(() => setMensajeExito(null), 4500);
+    } catch (err: unknown) {
+      setMensajeError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo publicar el mensaje. Intenta de nuevo."
+      );
+    } finally {
+      setEnviando(false);
     }
   }
 
@@ -111,21 +142,41 @@ export default function ComunidadPage() {
     if (!publicacionAReportar || !motivoReporte.trim()) return;
 
     setEnviandoReporte(true);
+    setMensajeError(null);
     try {
-      const supabase = createClient();
-      await supabase.from("reportes").insert({
-        publicacion_id: publicacionAReportar.id,
-        motivo: motivoReporte.trim(),
-        estado: "pendiente",
+      const res = await fetch("/api/reportes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          publicacion_id: publicacionAReportar.id,
+          motivo: motivoReporte.trim(),
+        }),
       });
-    } catch {
-      // Ignorar error de red si offline
+
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "No se pudo registrar el reporte."
+        );
+      }
+
+      setMensajeExito(
+        "Reporte enviado a moderación. Gracias por velar por la seguridad de la comunidad."
+      );
+      setTimeout(() => setMensajeExito(null), 5000);
+    } catch (err: unknown) {
+      setMensajeError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo enviar el reporte. Intenta de nuevo."
+      );
     } finally {
       setEnviandoReporte(false);
       setPublicacionAReportar(null);
       setMotivoReporte("");
-      setMensajeExito("Reporte enviado a moderación. Gracias por velar por la seguridad de la comunidad.");
-      setTimeout(() => setMensajeExito(null), 5000);
     }
   }
 
@@ -207,6 +258,32 @@ export default function ComunidadPage() {
         )}
       </header>
 
+      {avisoDatos && (
+        <div className="safety-banner" role="status">
+          <span>Aviso</span>
+          <div>
+            <strong>Modo de respaldo:</strong> {avisoDatos}
+          </div>
+        </div>
+      )}
+
+      {mensajeError && (
+        <div
+          role="alert"
+          style={{
+            background: "#FDECEC",
+            border: "1px solid #F3C2C2",
+            color: "#9B1C1C",
+            padding: "12px 18px",
+            borderRadius: "var(--radius)",
+            marginTop: "16px",
+            fontWeight: 500,
+          }}
+        >
+          {mensajeError}
+        </div>
+      )}
+
       {/* Regla de Seguridad Comunitaria */}
       <div className="safety-banner">
         <span>⚠️</span>
@@ -257,22 +334,33 @@ export default function ComunidadPage() {
         </div>
       </section>
 
-      {/* Feed de Publicaciones */}
-      {publicacionesFiltradas.length === 0 ? (
-        <div className="empty-state">
-          <h4>No hay mensajes que coincidan con tu búsqueda</h4>
-          <p>Prueba con otros términos de búsqueda o sé el primero en compartir un mensaje.</p>
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{ marginTop: "14px" }}
-            onClick={() => {
-              setCategoriaActiva("todas");
-              setBusqueda("");
-            }}
-          >
-            Limpiar filtros
-          </button>
+      {/* Feed de Publicaciones / Estados */}
+      {cargando ? (
+        <div className="loading-state-card">
+          <div className="spinner" />
+          <p>Cargando publicaciones de la comunidad desde Supabase...</p>
+        </div>
+      ) : publicacionesFiltradas.length === 0 ? (
+        <div className="empty-state-card">
+          <h4>No se encontraron publicaciones</h4>
+          <p>
+            {busqueda || categoriaActiva !== "todas"
+              ? "No hay mensajes que coincidan con tus filtros actuales. Intenta limpiar la búsqueda."
+              : "Aún no hay publicaciones en el muro comunitario. ¡Sé la primera persona en compartir un mensaje solidario o una alerta para la ruta!"}
+          </p>
+          {(busqueda || categoriaActiva !== "todas") && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ marginTop: "16px" }}
+              onClick={() => {
+                setCategoriaActiva("todas");
+                setBusqueda("");
+              }}
+            >
+              Limpiar filtros
+            </button>
+          )}
         </div>
       ) : (
         <div className="single-column-list">

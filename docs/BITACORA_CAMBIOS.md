@@ -12,6 +12,7 @@
 - [Entrada 001 - 2026-10-19: Implementacion de Workflows de GitHub, Gobernanza en Espanol y Documentacion](#entrada-001---2026-10-19-implementacion-de-workflows-de-github-gobernanza-en-espanol-y-documentacion)
 - [Entrada 002 - 2026-10-29: Implementacion de las Paginas de Salud, Comunidad y Directorio](#entrada-002---2026-10-29-implementacion-de-las-paginas-de-salud-comunidad-y-directorio)
 - [Entrada 003 - 2026-10-29: Migracion de Guias de Salud y Panel Unificado de Administracion y Moderacion](#entrada-003---2026-10-29-migracion-de-guias-de-salud-y-panel-unificado-de-administracion-y-moderacion)
+- [Entrada 005 - 2026-11-03: Correccion de Conexion Publica, RLS Explicita y Respaldo ante Supabase No Disponible](#entrada-005---2026-11-03-correccion-de-conexion-publica-rls-explicita-y-respaldo-ante-supabase-no-disponible)
 
 ---
 
@@ -180,5 +181,117 @@ El usuario solicito:
 - `npm run lint`: Exito (0 advertencias, 0 errores).
 - `npm run typecheck`: Exito (TypeScript compila sin errores).
 - `npm run build`: Exito (Build de produccion Next.js 16 generado con Turbopack; 5 rutas `/`, `/salud`, `/comunidad`, `/directorio`, `/admin` pre-renderizadas exitosamente).
+
+---
+
+## Entrada 005 - 2026-11-03: Correccion de Conexion Publica, RLS Explicita y Respaldo ante Supabase No Disponible
+
+### 1. Contexto y Solicitud del Usuario
+Se reporto un HTTP 500 con espera aproximada de 7 segundos en los endpoints publicos `GET /api/publicaciones` y `GET /api/organizaciones`, mientras que el panel `/admin` parecia seguir mostrando datos. Se solicito revisar las politicas RLS de lectura anonima, reforzar las API Routes publicas, conectar las vistas `/comunidad`, `/directorio` y `/salud`, verificar lint/typecheck/build y registrar esta intervencion de forma acumulativa.
+
+### 2. Diagnostico Tecnico
+- **Causa principal**: El archivo `.env.local` apunta a Supabase local en `http://127.0.0.1:54321`, pero el puerto estaba cerrado y Docker no estaba disponible. Las consultas no podian establecer conexion.
+- **Motivo del falso positivo en `/admin`**: El panel inicializa sus estados con `REPORTES_INICIALES`, `ORGANIZACIONES_INICIALES`, `GUIAS_SALUD_DB_INICIALES`, etc. Por eso mostraba informacion aun sin una base de datos activa.
+- **Demora de 7 segundos**: `@supabase/postgrest-js` reintenta automaticamente las solicitudes GET fallidas con retroceso exponencial (1s + 2s + 4s). Eso explicaba la espera de ~7 segundos antes del error, incluso con un timeout de red de 5 segundos.
+- **Estado previo de RLS**: Las migraciones `00008_rls_policies.sql`, `00010_lookup_rls.sql` y `00011_guias_salud.sql` ya contenian politicas de lectura publica, pero no estaban declaradas explicitamente para `TO anon, authenticated` ni se aseguraban los `GRANT SELECT`.
+- **Conflicto de numeracion**: Ya existia `00012_ajustes_seguridad_conexion.sql`; por inmutabilidad y por la validacion de prefijos duplicados del workflow, la nueva migracion se creo como `00013_...`.
+
+### 3. Cambios Realizados
+- [supabase/migrations/00013_politicas_rls_publicas.sql](file:///c:/Users/usuario/documents/github/proyecto_etica/supabase/migrations/00013_politicas_rls_publicas.sql) (Nuevo):
+  - Politicas `SELECT TO anon, authenticated` explicitas para `publicaciones`, `organizaciones`, `guias_salud`, `categorias`, `ciudades` y `tipos_organizacion`.
+  - `publicaciones` visible y no eliminada; `organizaciones` y `guias_salud` no eliminadas; catalogos de lectura libre.
+  - `GRANT SELECT` para las tablas publicas y `GRANT INSERT` para los aportes ciudadanos en `publicaciones`, `organizaciones` y `reportes`.
+- [src/lib/supabase/server.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/lib/supabase/server.ts) (Modificado):
+  - Se agrego `createPublicServerClient()` con clave anonima, sin cookies y con timeout de red de 5 segundos.
+  - Se centralizo la configuracion de Supabase y se aplico el timeout al cliente de servidor existente.
+- [src/app/api/publicaciones/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/publicaciones/route.ts) (Modificado):
+  - GET con cliente publico, `force-dynamic`, consulta paralela de publicaciones y categorias, y `.retry(false)` para evitar la demora de 7 segundos.
+  - Respaldo automatico con `PUBLICACIONES_INICIALES` y `CATEGORIAS_INICIALES` cuando Supabase no responde, devolviendo `200` con `fuente: "respaldo_local"` y `advertencia`.
+  - POST con manejo defensivo y error JSON explicativo.
+- [src/app/api/organizaciones/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/organizaciones/route.ts) (Modificado):
+  - GET con cliente publico, consulta paralela de organizaciones, ciudades y tipos, `.retry(false)` y respaldo con datos iniciales.
+  - POST con manejo defensivo y error JSON explicativo.
+- [src/app/api/guias-salud/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/guias-salud/route.ts) (Modificado):
+  - GET con cliente publico, `.retry(false)` y respaldo con `GUIAS_SALUD_DB_INICIALES`.
+- [src/app/api/reportes/route.ts](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/api/reportes/route.ts) (Modificado):
+  - Uso del cliente publico con timeout y errores JSON mas claros.
+- [src/app/comunidad/page.tsx](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/comunidad/page.tsx) (Modificado):
+  - La vista consume primero `/api/publicaciones`, inicializa con datos de respaldo y muestra un aviso no bloqueante cuando se usa respaldo local.
+  - Los envios de publicaciones y reportes usan las API Routes publicas y muestran mensajes de error legibles.
+- [src/app/directorio/page.tsx](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/directorio/page.tsx) (Modificado):
+  - La vista consume `/api/organizaciones` para organizaciones, ciudades y tipos, con respaldo local y aviso visual.
+  - Las sugerencias ciudadanas se envian por la API publica con manejo de errores.
+- [src/app/salud/page.tsx](file:///c:/Users/usuario/documents/github/proyecto_etica/src/app/salud/page.tsx) (Modificado):
+  - La vista consume `/api/organizaciones` y `/api/guias-salud`, mantiene respaldo local y usa las ciudades devueltas por la API.
+- [docs/BITACORA_CAMBIOS.md](file:///c:/Users/usuario/documents/github/proyecto_etica/docs/BITACORA_CAMBIOS.md) (Modificado: esta entrada acumulativa).
+
+### 4. Comportamiento Resultante
+- Si Supabase esta disponible, las API publicas devuelven datos reales con `fuente: "supabase"`.
+- Si Supabase no esta disponible, las API responden en milisegundos con `200`, datos iniciales y `advertencia`, evitando el HTTP 500 y la espera de 7 segundos.
+- Las vistas publicas se renderizan siempre con contenido y muestran el aviso de modo de respaldo.
+- La aplicacion queda preparada para produccion cambiando `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` en el entorno de despliegue.
+
+### 5. Verificacion Realizada
+- `npm run lint`: Exito (0 advertencias, 0 errores).
+- `npm run typecheck`: Exito (TypeScript compila sin errores).
+- `npm run build`: Exito (Build de produccion Next.js 16 con Turbopack; API Routes dinamicas y paginas publicas pre-renderizadas).
+- Prueba de runtime con Supabase local apagado:
+  - `GET /api/publicaciones`: `200`, ~46 ms, `fuente: "respaldo_local"`.
+  - `GET /api/organizaciones`: `200`, ~47 ms, `fuente: "respaldo_local"`.
+  - `GET /api/guias-salud`: `200`, ~36 ms, `fuente: "respaldo_local"`.
+- La validacion real de RLS queda pendiente de activar Supabase local o configurar un proyecto hospedado; la migracion y los grants quedan listos para aplicarse.
+
+---
+
+## Entrada 006 - 2026-11-03: Vinculacion y Despliegue del Esquema a Supabase Cloud
+
+### 1. Contexto y Solicitud del Usuario
+Se solicito desplegar el esquema local en Supabase Cloud, aplicando las migraciones `00001` a `00013` y el archivo `seed.sql`, actualizar las variables de entorno de la aplicacion y verificar que las vistas publicas y el panel de administracion funcionen sin modo degradado.
+
+### 2. Proyecto Cloud Utilizado
+- Nombre: `Final-Etica`.
+- Referencia (`project-ref`): `hagnzcajoovznixrqtoc`.
+- Region: `us-east-1`.
+- Motor: PostgreSQL `17.11.0.011`.
+- Estado al momento del despliegue: `ACTIVE_HEALTHY`.
+
+### 3. Cambios Realizados
+- [supabase/config.toml](file:///c:/Users/usuario/documents/github/proyecto_etica/supabase/config.toml) (Nuevo): configuracion local generada con `npx supabase init --yes`, con `project_id = "Proyecto_etica"`, API local en `54321`, base local en `54322` y PostgreSQL 17.
+- [supabase/.gitignore](file:///c:/Users/usuario/documents/github/proyecto_etica/supabase/.gitignore) (Nuevo): exclusion de artefactos locales generados por la CLI.
+- Vinculacion del proyecto cloud mediante `npx supabase link --project-ref hagnzcajoovznixrqtoc --yes`.
+- Aplicacion remota de las migraciones `00001_extensions.sql` a `00013_politicas_rls_publicas.sql` mediante `npx supabase db push --include-seed`.
+- Carga remota de los datos de `supabase/seed.sql`: 3 ciudades y 4 organizaciones verificadas.
+- [.env.local](file:///c:/Users/usuario/documents/github/proyecto_etica/.env.local) (Modificado, no versionado): apunta a `https://hagnzcajoovznixrqtoc.supabase.co` y usa las claves `publishable` y `secret` del proyecto cloud. Las claves no se registran en este documento.
+
+### 4. Verificacion Realizada
+- `npx supabase db push --dry-run`: "Remote database is up to date" (sin migraciones pendientes).
+- Consultas REST directas con la clave publica:
+  - `categorias`: `200`, 4 filas.
+  - `ciudades`: `200`, 3 filas.
+  - `tipos_organizacion`: `200`, 6 filas.
+  - `publicaciones`: `200`, 0 filas.
+  - `organizaciones`: `200`, 4 filas.
+  - `guias_salud`: `200`, 5 filas.
+- Servidor de produccion local (`next start --port 3050`):
+  - `/`: `200`.
+  - `/comunidad`: `200`.
+  - `/directorio`: `200`.
+  - `/salud`: `200`.
+  - `/admin`: `200`.
+  - `GET /api/publicaciones`: `200`, `fuente: "supabase"`, 0 publicaciones.
+  - `GET /api/organizaciones`: `200`, `fuente: "supabase"`, 4 organizaciones.
+  - `GET /api/guias-salud`: `200`, `fuente: "supabase"`, 5 guias.
+  - `GET /api/admin/organizaciones`: `200` con sesion de administrador, 4 organizaciones.
+  - `GET /api/admin/guias`: `200` con sesion de administrador, 5 guias.
+  - `GET /api/admin/moderacion`: `200` con sesion de administrador, 0 reportes.
+- No se mostro el aviso de "Modo de respaldo"; las APIs devolvieron `fuente: "supabase"`.
+- `npm run lint`: Exito (0 advertencias, 0 errores).
+- `npm run typecheck`: Exito (TypeScript compila sin errores).
+- `npm run build`: Exito (build de produccion Next.js 16 con Turbopack).
+
+### 5. Observaciones
+- `publicaciones` quedo vacia porque `seed.sql` no carga publicaciones de ejemplo; se llenara con los aportes ciudadanos o con contenido administrativo.
+- La cookie de administracion se marca `Secure` en produccion; sobre HTTP local el navegador puede no enviarla, pero sobre HTTPS funciona correctamente.
+- Las migraciones existentes no se modificaron. Cualquier cambio futuro de esquema debe crear una nueva migracion `00014_...`.
 
 

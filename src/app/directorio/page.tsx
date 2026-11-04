@@ -1,10 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
-  ORGANIZACIONES_INICIALES,
   CIUDADES_INICIALES,
+  ORGANIZACIONES_INICIALES,
   TIPOS_ORGANIZACION_INICIALES,
 } from "@/lib/initialData";
 import {
@@ -14,9 +13,16 @@ import {
 } from "@/types/database";
 
 export default function DirectorioPage() {
-  const [organizaciones, setOrganizaciones] = useState<OrganizacionConDetalles[]>(ORGANIZACIONES_INICIALES);
-  const [ciudades] = useState<Ciudad[]>(CIUDADES_INICIALES);
-  const [tipos] = useState<TipoOrganizacion[]>(TIPOS_ORGANIZACION_INICIALES);
+  const [organizaciones, setOrganizaciones] = useState<OrganizacionConDetalles[]>(
+    ORGANIZACIONES_INICIALES
+  );
+  const [ciudades, setCiudades] = useState<Ciudad[]>(CIUDADES_INICIALES);
+  const [tipos, setTipos] = useState<TipoOrganizacion[]>(
+    TIPOS_ORGANIZACION_INICIALES
+  );
+  const [cargando, setCargando] = useState<boolean>(true);
+  const [avisoDatos, setAvisoDatos] = useState<string | null>(null);
+  const [mensajeError, setMensajeError] = useState<string | null>(null);
 
   // Filtros
   const [tipoSeleccionado, setTipoSeleccionado] = useState<string>("todos");
@@ -35,42 +41,122 @@ export default function DirectorioPage() {
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
   useEffect(() => {
-    async function cargarDirectorioSupabase() {
-      try {
-        const supabase = createClient();
-        // Consulta respetando 00004_organizaciones.sql y 00008_rls_policies.sql
-        const { data, error } = await supabase
-          .from("organizaciones")
-          .select("*, ciudad:ciudades(*), tipo:tipos_organizacion(*)")
-          .is("eliminado_en", null)
-          .order("verificado", { ascending: false });
+    const controlador = new AbortController();
+    const temporizador = setTimeout(() => controlador.abort(), 6000);
 
-        if (!error && data && data.length > 0) {
-          setOrganizaciones(data as OrganizacionConDetalles[]);
+    async function cargarDirectorioPublico() {
+      setCargando(true);
+      try {
+        const res = await fetch("/api/organizaciones", {
+          signal: controlador.signal,
+          cache: "no-store",
+        });
+
+        if (!res.ok) {
+          throw new Error("El servidor no devolvió una respuesta válida.");
         }
+
+        const json = await res.json();
+
+        if (Array.isArray(json.organizaciones)) {
+          setOrganizaciones(json.organizaciones as OrganizacionConDetalles[]);
+        }
+
+        if (Array.isArray(json.ciudades) && json.ciudades.length > 0) {
+          const ciudadesServidor = json.ciudades as Ciudad[];
+          setCiudades(ciudadesServidor);
+          setCiudadIdSugerida((actual) =>
+            ciudadesServidor.some((ciudad) => ciudad.id === actual)
+              ? actual
+              : ciudadesServidor[0].id
+          );
+        }
+
+        if (Array.isArray(json.tipos) && json.tipos.length > 0) {
+          const tiposServidor = json.tipos as TipoOrganizacion[];
+          setTipos(tiposServidor);
+          setTipoIdSugerido((actual) =>
+            tiposServidor.some((tipo) => tipo.id === actual)
+              ? actual
+              : tiposServidor[0].id
+          );
+        }
+
+        setAvisoDatos(
+          typeof json.advertencia === "string" ? json.advertencia : null
+        );
       } catch {
-        // En caso de modo offline o sin servicio local activo, se mantiene el estado inicial
+        setAvisoDatos(
+          "No se pudo conectar con el servidor. Se muestra el directorio de respaldo."
+        );
+      } finally {
+        clearTimeout(temporizador);
+        setCargando(false);
       }
     }
 
-    cargarDirectorioSupabase();
+    cargarDirectorioPublico();
+
+    return () => {
+      clearTimeout(temporizador);
+      controlador.abort();
+    };
   }, []);
 
-  function handleSugerirOrganizacion(e: React.FormEvent) {
+  async function handleSugerirOrganizacion(e: React.FormEvent) {
     e.preventDefault();
     if (!nombreOrg.trim()) return;
 
     setEnviandoSugerencia(true);
-    // Simular recepción para revisión de moderación
-    setTimeout(() => {
-      setEnviandoSugerencia(false);
+    setMensajeError(null);
+
+    try {
+      const res = await fetch("/api/organizaciones", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nombre: nombreOrg.trim(),
+          ciudad_id: Number(ciudadIdSugerida),
+          tipo_id: Number(tipoIdSugerido),
+          telefono: telefonoOrg.trim() || null,
+          nota: notaOrg.trim() || null,
+        }),
+      });
+
+      const json = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === "string"
+            ? json.error
+            : "No se pudo guardar la sugerencia."
+        );
+      }
+
+      if (json.organizacion) {
+        setOrganizaciones((prev) => [
+          json.organizacion as OrganizacionConDetalles,
+          ...prev,
+        ]);
+      }
+
       setMostrarModalSugerir(false);
       setNombreOrg("");
       setTelefonoOrg("");
       setNotaOrg("");
-      setMensajeExito("¡Gracias por tu aporte! La información será verificada por moderadores antes de publicarse.");
+      setMensajeExito(
+        "¡Aporte recibido y guardado en la base de datos! Será revisado por moderación antes de certificarse."
+      );
       setTimeout(() => setMensajeExito(null), 5000);
-    }, 600);
+    } catch (err: unknown) {
+      setMensajeError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo enviar la sugerencia. Intenta de nuevo."
+      );
+    } finally {
+      setEnviandoSugerencia(false);
+    }
   }
 
   // Filtrado compuesto
@@ -112,8 +198,10 @@ export default function DirectorioPage() {
         return "badge-animo";
       case "legal":
         return "badge-pregunta";
+      case "comedor":
+        return "badge-alerta";
       default:
-        return "badge-tipo";
+        return "badge-consejo";
     }
   }
 
@@ -123,18 +211,18 @@ export default function DirectorioPage() {
       <header className="page-header">
         <div className="page-header-top">
           <div>
-            <h1 className="page-title">Directorio de Recursos y Organizaciones</h1>
+            <h1 className="page-title">Directorio de Organizaciones y Albergues</h1>
             <p className="page-desc">
-              Puntos de apoyo verificados en Guatemala para personas migrantes: albergues seguros,
-              atención médica gratuita, asesoría legal en derechos humanos y comedores solidarios.
+              Puntos de apoyo humanitario en Guatemala: albergues temporales, comedores solidarios,
+              defensorías de derechos humanos y asesoría migratoria legal.
             </p>
           </div>
           <button
             type="button"
-            className="btn btn-outline"
+            className="btn btn-primary"
             onClick={() => setMostrarModalSugerir(true)}
           >
-            ➕ Sugerir un punto de apoyo
+            ➕ Sugerir un lugar de apoyo
           </button>
         </div>
 
@@ -155,45 +243,62 @@ export default function DirectorioPage() {
         )}
       </header>
 
-      {/* Alerta de Confidencialidad y Gratuidad */}
-      <div className="safety-banner">
-        <span>🤝</span>
-        <div>
-          <strong>Servicios Gratuitos y Humanitarios:</strong> Ninguno de los albergues, comedores o
-          clínicas comunitarias listados cobra dinero por techo, comida o auxilio médico de emergencia.
-          Si alguien te pide un pago para ingresar, repórtalo en la sección de Comunidad.
+      {avisoDatos && (
+        <div className="safety-banner" role="status">
+          <span>Aviso</span>
+          <div>
+            <strong>Modo de respaldo:</strong> {avisoDatos}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Sección de Filtros */}
+      {mensajeError && (
+        <div
+          role="alert"
+          style={{
+            background: "#FDECEC",
+            border: "1px solid #F3C2C2",
+            color: "#9B1C1C",
+            padding: "12px 18px",
+            borderRadius: "var(--radius)",
+            marginTop: "16px",
+            fontWeight: 500,
+          }}
+        >
+          {mensajeError}
+        </div>
+      )}
+
+      {/* Barra de Filtros */}
       <section className="filter-section">
-        {/* Barra de búsqueda y Select de Ciudad */}
         <div className="filter-row">
           <div className="search-input-box">
             <span className="search-icon">🔍</span>
             <input
               type="text"
               className="search-input"
-              placeholder="Buscar por nombre, servicio, dirección o municipio..."
+              placeholder="Buscar por nombre, ciudad o servicio..."
               value={busqueda}
               onChange={(e) => setBusqueda(e.target.value)}
             />
           </div>
 
-          <select
-            className="select-box"
-            value={ciudadSeleccionada}
-            onChange={(e) => setCiudadSeleccionada(e.target.value)}
-          >
-            <option value="todas">Todas las ciudades / departamentos</option>
-            {ciudades.map((c) => (
-              <option key={c.id} value={c.nombre}>
-                {c.nombre} ({c.departamento})
-              </option>
-            ))}
-          </select>
+          <div className="select-container">
+            <select
+              className="filter-select"
+              value={ciudadSeleccionada}
+              onChange={(e) => setCiudadSeleccionada(e.target.value)}
+            >
+              <option value="todas">Todas las ciudades</option>
+              {ciudades.map((c) => (
+                <option key={c.id} value={c.nombre}>
+                  {c.nombre} ({c.departamento})
+                </option>
+              ))}
+            </select>
+          </div>
 
-          <label className="checkbox-label" style={{ fontSize: "0.88rem" }}>
+          <label className="checkbox-label" style={{ whiteSpace: "nowrap" }}>
             <input
               type="checkbox"
               checked={soloVerificados}
@@ -231,24 +336,35 @@ export default function DirectorioPage() {
         </div>
       </section>
 
-      {/* Grid de Organizaciones */}
-      {organizacionesFiltradas.length === 0 ? (
-        <div className="empty-state">
+      {/* Grid de Organizaciones / Estados */}
+      {cargando ? (
+        <div className="loading-state-card">
+          <div className="spinner" />
+          <p>Cargando directorio de organizaciones desde Supabase...</p>
+        </div>
+      ) : organizacionesFiltradas.length === 0 ? (
+        <div className="empty-state-card">
           <h4>No se encontraron organizaciones con estos criterios</h4>
-          <p>Intenta restablecer los filtros para ver todos los puntos de apoyo disponibles.</p>
-          <button
-            type="button"
-            className="btn btn-outline"
-            style={{ marginTop: "14px" }}
-            onClick={() => {
-              setTipoSeleccionado("todos");
-              setCiudadSeleccionada("todas");
-              setBusqueda("");
-              setSoloVerificados(false);
-            }}
-          >
-            Restablecer filtros
-          </button>
+          <p>
+            {busqueda || tipoSeleccionado !== "todos" || ciudadSeleccionada !== "todas" || soloVerificados
+              ? "Prueba restableciendo los filtros para ver todos los puntos de acogida disponibles."
+              : "Actualmente no hay organizaciones registradas en la base de datos."}
+          </p>
+          {(busqueda || tipoSeleccionado !== "todos" || ciudadSeleccionada !== "todas" || soloVerificados) && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ marginTop: "16px" }}
+              onClick={() => {
+                setTipoSeleccionado("todos");
+                setCiudadSeleccionada("todas");
+                setBusqueda("");
+                setSoloVerificados(false);
+              }}
+            >
+              Restablecer filtros
+            </button>
+          )}
         </div>
       ) : (
         <div className="cards-grid">
@@ -329,7 +445,7 @@ export default function DirectorioPage() {
 
             <p style={{ fontSize: "0.9rem", color: "var(--muted)", marginBottom: "16px" }}>
               ¿Conoces un albergue seguro, comedor, clínica humanitaria o defensoría que deba
-              estar en el directorio? Envía los datos para su verificación.
+              estar en el directorio? Envía los datos para su verificación en la base de datos.
             </p>
 
             <form onSubmit={handleSugerirOrganizacion}>
@@ -348,51 +464,53 @@ export default function DirectorioPage() {
                 />
               </div>
 
-              <div className="form-group">
-                <label className="form-label" htmlFor="sug-tipo">
-                  Tipo de Servicio:
-                </label>
-                <select
-                  id="sug-tipo"
-                  className="form-select-full"
-                  value={tipoIdSugerido}
-                  onChange={(e) => setTipoIdSugerido(Number(e.target.value))}
-                >
-                  {tipos.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.nombre}
-                    </option>
-                  ))}
-                </select>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="sug-ciudad">
+                    Ciudad / Ubicación:
+                  </label>
+                  <select
+                    id="sug-ciudad"
+                    className="form-select-full"
+                    value={ciudadIdSugerida}
+                    onChange={(e) => setCiudadIdSugerida(Number(e.target.value))}
+                  >
+                    {ciudades.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre} ({c.departamento})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" htmlFor="sug-tipo">
+                    Tipo de Apoyo:
+                  </label>
+                  <select
+                    id="sug-tipo"
+                    className="form-select-full"
+                    value={tipoIdSugerido}
+                    onChange={(e) => setTipoIdSugerido(Number(e.target.value))}
+                  >
+                    {tipos.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="form-group">
-                <label className="form-label" htmlFor="sug-ciudad">
-                  Ciudad / Municipio:
-                </label>
-                <select
-                  id="sug-ciudad"
-                  className="form-select-full"
-                  value={ciudadIdSugerida}
-                  onChange={(e) => setCiudadIdSugerida(Number(e.target.value))}
-                >
-                  {ciudades.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nombre} ({c.departamento})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label" htmlFor="sug-telefono">
+                <label className="form-label" htmlFor="sug-tel">
                   Teléfono de contacto (opcional):
                 </label>
                 <input
-                  id="sug-telefono"
-                  type="text"
+                  id="sug-tel"
+                  type="tel"
                   className="form-input"
-                  placeholder="Ej. 2233-4455"
+                  placeholder="Ej. 2230-0000 o +502 ..."
                   value={telefonoOrg}
                   onChange={(e) => setTelefonoOrg(e.target.value)}
                 />
@@ -400,19 +518,19 @@ export default function DirectorioPage() {
 
               <div className="form-group">
                 <label className="form-label" htmlFor="sug-nota">
-                  Dirección y servicios que brindan:
+                  Información clave (dirección, horarios, requisitos):
                 </label>
                 <textarea
                   id="sug-nota"
                   className="form-textarea"
                   rows={3}
-                  placeholder="Describe la dirección exacta, horarios y qué tipo de ayuda ofrecen (comida, hospedaje, medicina)..."
+                  placeholder="Ej. Abierto de 8am a 6pm, entregan raciones de comida y asesoría básica..."
                   value={notaOrg}
                   onChange={(e) => setNotaOrg(e.target.value)}
                 />
               </div>
 
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "24px" }}>
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "20px" }}>
                 <button
                   type="button"
                   className="btn btn-outline"
@@ -425,7 +543,7 @@ export default function DirectorioPage() {
                   className="btn btn-primary"
                   disabled={enviandoSugerencia || !nombreOrg.trim()}
                 >
-                  {enviandoSugerencia ? "Enviando..." : "Enviar sugerencia"}
+                  {enviandoSugerencia ? "Enviando aporte..." : "Enviar sugerencia"}
                 </button>
               </div>
             </form>

@@ -1,58 +1,101 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 import {
   GUIAS_SALUD_DB_INICIALES,
   ORGANIZACIONES_INICIALES,
   CIUDADES_INICIALES,
 } from "@/lib/initialData";
-import { OrganizacionConDetalles, GuiaSalud } from "@/types/database";
+import { OrganizacionConDetalles, GuiaSalud, Ciudad } from "@/types/database";
 
 export default function SaludPage() {
   const [organizacionesSalud, setOrganizacionesSalud] = useState<OrganizacionConDetalles[]>(
     ORGANIZACIONES_INICIALES.filter((org) => org.tipo?.nombre === "Salud" || org.tipo_id === 2)
   );
   const [guias, setGuias] = useState<GuiaSalud[]>(GUIAS_SALUD_DB_INICIALES);
+  const [ciudades, setCiudades] = useState<Ciudad[]>(CIUDADES_INICIALES);
   const [ciudadSeleccionada, setCiudadSeleccionada] = useState<string>("todas");
   const [guiaAbierta, setGuiaAbierta] = useState<string>("cuidado-pies-ampollas");
   const [vistaActiva, setVistaActiva] = useState<"guias" | "puntos">("guias");
+  const [avisoDatos, setAvisoDatos] = useState<string | null>(null);
 
   useEffect(() => {
-    async function cargarSaludSupabase() {
-      try {
-        const supabase = createClient();
-        // Consultar organizaciones de salud respetando 00002 y 00004
-        const { data, error } = await supabase
-          .from("organizaciones")
-          .select("*, ciudad:ciudades(*), tipo:tipos_organizacion(*)")
-          .is("eliminado_en", null);
+    const controlador = new AbortController();
+    const temporizador = setTimeout(() => controlador.abort(), 6000);
 
-        if (!error && data && data.length > 0) {
-          const soloSalud = (data as OrganizacionConDetalles[]).filter(
-            (o) => o.tipo?.nombre === "Salud" || o.tipo_id === 2
-          );
-          if (soloSalud.length > 0) {
-            setOrganizacionesSalud(soloSalud);
+    async function cargarSaludPublica() {
+      let aviso: string | null = null;
+      let huboFallo = false;
+
+      const [resOrganizaciones, resGuias] = await Promise.allSettled([
+        fetch("/api/organizaciones", {
+          signal: controlador.signal,
+          cache: "no-store",
+        }),
+        fetch("/api/guias-salud", {
+          signal: controlador.signal,
+          cache: "no-store",
+        }),
+      ]);
+
+      if (
+        resOrganizaciones.status === "fulfilled" &&
+        resOrganizaciones.value.ok
+      ) {
+        try {
+          const json = await resOrganizaciones.value.json();
+          if (Array.isArray(json.organizaciones)) {
+            const soloSalud = (
+              json.organizaciones as OrganizacionConDetalles[]
+            ).filter((org) => org.tipo?.nombre === "Salud" || org.tipo_id === 2);
+            if (soloSalud.length > 0) {
+              setOrganizacionesSalud(soloSalud);
+            }
           }
+          if (Array.isArray(json.ciudades) && json.ciudades.length > 0) {
+            setCiudades(json.ciudades as Ciudad[]);
+          }
+          if (typeof json.advertencia === "string") {
+            aviso = json.advertencia;
+          }
+        } catch {
+          huboFallo = true;
         }
-
-        // Consultar guías de salud y autocuidado de 00011_guias_salud.sql
-        const { data: dataGuias, error: errorGuias } = await supabase
-          .from("guias_salud")
-          .select("*")
-          .is("eliminado_en", null)
-          .order("orden", { ascending: true });
-
-        if (!errorGuias && dataGuias && dataGuias.length > 0) {
-          setGuias(dataGuias as GuiaSalud[]);
-        }
-      } catch {
-        // En caso de estar fuera de línea o sin contenedor local activo, se mantiene el estado inicial
+      } else {
+        huboFallo = true;
       }
+
+      if (resGuias.status === "fulfilled" && resGuias.value.ok) {
+        try {
+          const json = await resGuias.value.json();
+          if (Array.isArray(json.guias) && json.guias.length > 0) {
+            setGuias(json.guias as GuiaSalud[]);
+          }
+          if (typeof json.advertencia === "string") {
+            aviso = json.advertencia;
+          }
+        } catch {
+          huboFallo = true;
+        }
+      } else {
+        huboFallo = true;
+      }
+
+      setAvisoDatos(
+        aviso ??
+          (huboFallo
+            ? "No se pudo conectar con el servidor. Se muestra información de respaldo."
+            : null)
+      );
+      clearTimeout(temporizador);
     }
 
-    cargarSaludSupabase();
+    cargarSaludPublica();
+
+    return () => {
+      clearTimeout(temporizador);
+      controlador.abort();
+    };
   }, []);
 
 
@@ -101,6 +144,15 @@ export default function SaludPage() {
           </ul>
         </div>
       </header>
+
+      {avisoDatos && (
+        <div className="safety-banner" role="status">
+          <span>Aviso</span>
+          <div>
+            <strong>Modo de respaldo:</strong> {avisoDatos}
+          </div>
+        </div>
+      )}
 
       {/* Selector de Pestañas */}
       <div style={{ display: "flex", gap: "10px", marginBottom: "24px" }}>
@@ -197,7 +249,7 @@ export default function SaludPage() {
                 onChange={(e) => setCiudadSeleccionada(e.target.value)}
               >
                 <option value="todas">Todas las ubicaciones</option>
-                {CIUDADES_INICIALES.map((c) => (
+                {ciudades.map((c) => (
                   <option key={c.id} value={c.nombre}>
                     {c.nombre} ({c.departamento})
                   </option>
